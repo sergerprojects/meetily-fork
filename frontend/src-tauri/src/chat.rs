@@ -150,6 +150,11 @@ pub async fn run_claude(
         .env("HOME", &h)
         .env("PATH", path)
         .env("USER", std::env::var("USER").unwrap_or_default())
+        .env("LOGNAME", std::env::var("LOGNAME").or_else(|_| std::env::var("USER")).unwrap_or_default())
+        // Claude Code finds its saved connector sign-ins through these; without them
+        // a headless call reports "needs authorization" even when signed in.
+        .env("TMPDIR", std::env::temp_dir())
+        .env("SHELL", "/bin/zsh")
         .env("LANG", "en_US.UTF-8")
         .current_dir(std::env::temp_dir())
         .stdin(Stdio::piped())
