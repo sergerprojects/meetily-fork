@@ -20,6 +20,8 @@ import {
   formatEventTime,
   getCalendarRecordMode,
   getCalendarStatus,
+  getIgnoredApps,
+  setIgnoredApps,
   getUpcomingCalendarEvents,
   setCalendarIcalUrl,
   setCalendarRecordMode,
@@ -39,9 +41,11 @@ export function CalendarSettings() {
   const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null);
   const [linkInput, setLinkInput] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [ignoredText, setIgnoredText] = useState('');
 
   useEffect(() => {
     isEnabled().then(setLaunchAtLogin).catch(() => setLaunchAtLogin(null));
+    getIgnoredApps().then(apps => setIgnoredText(apps.join(', ')));
   }, []);
 
   const handleLaunchAtLogin = async (checked: boolean) => {
@@ -99,6 +103,17 @@ export function CalendarSettings() {
       await refreshEvents();
     } catch (error) {
       toast.error('Could not remove calendar link', { description: String(error) });
+    }
+  };
+
+  const saveIgnoredApps = async () => {
+    const apps = ignoredText.split(',').map(a => a.trim()).filter(Boolean);
+    try {
+      await setIgnoredApps(apps);
+      setIgnoredText(apps.join(', '));
+      toast.success('Saved');
+    } catch (error) {
+      toast.error('Failed to save', { description: String(error) });
     }
   };
 
@@ -191,6 +206,24 @@ export function CalendarSettings() {
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="p-4 border rounded-lg space-y-2">
+        <div className="font-medium">Never treat these apps as a meeting</div>
+        <div className="text-sm text-gray-600">
+          Comma-separated app names (for example Discord, FaceTime). Using the microphone in these apps won&apos;t ask to record.
+        </div>
+        <div className="flex gap-2">
+          <Input
+            placeholder="Discord, FaceTime"
+            value={ignoredText}
+            onChange={e => setIgnoredText(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && saveIgnoredApps()}
+          />
+          <Button size="sm" variant="outline" onClick={saveIgnoredApps}>
+            Save
+          </Button>
+        </div>
       </div>
 
       {status?.enabled && (

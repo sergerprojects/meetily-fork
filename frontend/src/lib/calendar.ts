@@ -5,6 +5,7 @@ export interface CalendarAttendee {
   email: string;
   response_status: string | null;
   organizer: boolean;
+  is_self?: boolean;
 }
 
 export interface CalendarEvent {
@@ -134,4 +135,51 @@ export function startRecordingWithTitle(
     sessionStorage.setItem('autoStartRecording', 'true');
     navigateHome();
   }
+}
+
+export interface HomeMeeting {
+  id: string;
+  title: string;
+  /** Event start (calendar match) or save time, RFC3339. */
+  when: string;
+  /** Other attendees' names; empty without a calendar match. */
+  attendees: string[];
+}
+
+/** Events not yet ended through the end of tomorrow. */
+export async function getCalendarAgenda(): Promise<CalendarEvent[]> {
+  try {
+    return await invoke<CalendarEvent[]>('calendar_agenda');
+  } catch {
+    return [];
+  }
+}
+
+export async function getHomeMeetings(limit = 60): Promise<HomeMeeting[]> {
+  try {
+    return await invoke<HomeMeeting[]>('calendar_home_meetings', { limit });
+  } catch {
+    return [];
+  }
+}
+
+/** Name to show instead of "Others" while recording a 1:1; null when unsure or a group meeting. */
+export async function getCurrentOtherName(): Promise<string | null> {
+  try {
+    return await invoke<string | null>('calendar_current_other_name');
+  } catch {
+    return null;
+  }
+}
+
+export async function getIgnoredApps(): Promise<string[]> {
+  try {
+    return await invoke<string[]>('get_ignored_apps');
+  } catch {
+    return [];
+  }
+}
+
+export async function setIgnoredApps(apps: string[]): Promise<void> {
+  await invoke('set_ignored_apps', { apps });
 }

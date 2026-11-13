@@ -70,6 +70,9 @@ pub struct CalendarAttendee {
     pub email: String,
     pub response_status: Option<String>,
     pub organizer: bool,
+    /// This attendee is the calendar owner (you).
+    #[serde(default)]
+    pub is_self: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -300,6 +303,7 @@ pub fn parse_event(raw: &Value) -> Option<CalendarEvent> {
                     .and_then(|v| v.as_str())
                     .map(String::from),
                 organizer: a.get("organizer").and_then(|v| v.as_bool()).unwrap_or(false),
+                is_self: a.get("self").and_then(|v| v.as_bool()).unwrap_or(false),
             })
         })
         .collect();
@@ -373,6 +377,16 @@ pub fn end_of_tomorrow<Tz: TimeZone>(now: &DateTime<Tz>) -> DateTime<Utc> {
         .or_else(|| now.timezone().from_local_datetime(&(midnight + Duration::hours(1))).earliest())
         .map(|d| d.with_timezone(&Utc))
         .unwrap_or_else(|| now.with_timezone(&Utc) + Duration::hours(48))
+}
+
+/// The one other person on a 1:1: you are an attendee and exactly one other
+/// real attendee exists. Lets "Others" be shown by name without any audio work.
+pub fn one_other_name(event: &CalendarEvent) -> Option<String> {
+    if !event.attendees.iter().any(|a| a.is_self) {
+        return None;
+    }
+    let others: Vec<&CalendarAttendee> = event.attendees.iter().filter(|a| !a.is_self).collect();
+    (others.len() == 1 && !others[0].name.trim().is_empty()).then(|| others[0].name.trim().to_string())
 }
 
 /// Should the poller prompt for this event right now?
@@ -487,6 +501,19 @@ pub async fn attach_to_saved_meeting(
 
     log::info!("Calendar: attached event {} to meeting {}", event.id, meeting_id);
 
+    // 1:1: show the other person by name instead of "Others".
+    if let Some(name) = one_other_name(&event) {
+        match sqlx::query("UPDATE transcripts SET speaker = ? WHERE meeting_id = ? AND speaker = 'Others'")
+            .bind(&name)
+            .bind(meeting_id)
+            .execute(pool)
+            .await
+        {
+            Ok(r) => log::info!("Calendar: labelled {} 'Others' lines as the 1:1 attendee", r.rows_affected()),
+            Err(e) => log::warn!("Calendar: failed to name 1:1 speaker for {}: {}", meeting_id, e),
+        }
+    }
+
     if is_default_title(meeting_title) && !event.summary.is_empty() {
         match crate::database::repositories::meeting::MeetingsRepository::update_meeting_name(
             pool,
@@ -579,6 +606,91 @@ pub async fn calendar_upcoming() -> Vec<CalendarEvent> {
         .filter(|e| e.bounds().map_or(false, |(start, end)| end > now && start < horizon))
         .cloned()
         .collect()
+}
+
+/// Everything not yet ended through the end of tomorrow, from the poller cache
+/// (the Home screen's "Coming up").
+#[tauri::command]
+pub async fn calendar_agenda() -> Vec<CalendarEvent> {
+    let now = Utc::now();
+    STATE
+        .upcoming
+        .read()
+        .await
+        .iter()
+        .filter(|e| e.bounds().map_or(false, |(_, end)| end > now))
+        .cloned()
+        .collect()
+}
+
+#[derive(Debug, Serialize)]
+pub struct HomeMeeting {
+    pub id: String,
+    pub title: String,
+    /// Event start when the meeting matched a calendar event, else when it was saved. RFC3339.
+    pub when: String,
+    /// Other attendees' names (you excluded), empty when no calendar match.
+    pub attendees: Vec<String>,
+}
+
+/// Recent saved meetings with who was in them, for the Home list.
+#[tauri::command]
+pub async fn calendar_home_meetings(
+    state: tauri::State<'_, crate::state::AppState>,
+    limit: Option<i64>,
+) -> Result<Vec<HomeMeeting>, String> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT id, title, created_at, calendar_event_json FROM meetings ORDER BY created_at DESC LIMIT ?",
+    )
+    .bind(limit.unwrap_or(60).clamp(1, 500))
+    .fetch_all(state.db_manager.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| {
+            let id: String = r.try_get("id").ok()?;
+            let title: String = r.try_get("title").ok()?;
+            let created: DateTime<Utc> = r.try_get("created_at").ok()?;
+            let event: Option<CalendarEvent> = r
+                .try_get::<Option<String>, _>("calendar_event_json")
+                .ok()
+                .flatten()
+                .and_then(|j| serde_json::from_str(&j).ok());
+            let (when, attendees) = match event {
+                Some(e) => (
+                    e.start.clone(),
+                    e.attendees.iter().filter(|a| !a.is_self).map(|a| a.name.clone()).collect(),
+                ),
+                None => (created.to_rfc3339(), Vec::new()),
+            };
+            Some(HomeMeeting { id, title, when, attendees })
+        })
+        .collect())
+}
+
+/// Name to show instead of "Others" while recording a 1:1 (the recording's
+/// calendar event, else the single event happening right now). None when unsure.
+#[tauri::command]
+pub async fn calendar_current_other_name() -> Option<String> {
+    if let Some((event, _)) = STATE.pending.lock().await.as_ref() {
+        return one_other_name(event);
+    }
+    let now = Utc::now();
+    let upcoming = STATE.upcoming.read().await;
+    let current: Vec<&CalendarEvent> = upcoming
+        .iter()
+        .filter(|e| e.bounds().map_or(false, |(s, en)| s <= now + Duration::minutes(2) && en > now))
+        .collect();
+    let pick = if current.len() == 1 {
+        Some(current[0])
+    } else {
+        let video: Vec<&&CalendarEvent> = current.iter().filter(|e| e.video_url.is_some()).collect();
+        (video.len() == 1).then(|| *video[0])
+    };
+    pick.and_then(one_other_name)
 }
 
 #[tauri::command]
@@ -682,6 +794,24 @@ mod tests {
     }
 
     #[test]
+    fn one_other_name_only_for_true_1on1() {
+        let mut ev = parse_event(&timed("a", "2026-11-13T16:30:00Z", "2026-11-13T17:00:00Z")).unwrap();
+        let mk = |name: &str, is_self: bool| CalendarAttendee {
+            name: name.to_string(),
+            email: format!("{}@example.com", name.to_lowercase()),
+            response_status: None,
+            organizer: false,
+            is_self,
+        };
+        ev.attendees = vec![mk("Me", true), mk("Amelia", false)];
+        assert_eq!(one_other_name(&ev).as_deref(), Some("Amelia"));
+        ev.attendees = vec![mk("Me", true), mk("Amelia", false), mk("Sam", false)];
+        assert_eq!(one_other_name(&ev), None, "group meeting");
+        ev.attendees = vec![mk("Amelia", false)];
+        assert_eq!(one_other_name(&ev), None, "no self marker: not sure it is a 1:1");
+    }
+
+    #[test]
     fn declined_event_skipped() {
         let mut raw = timed("d", "2026-11-12T10:00:00Z", "2026-11-12T11:00:00Z");
         raw["attendees"] = json!([
@@ -750,6 +880,7 @@ mod tests {
                     email: format!("p{}@example.com", i),
                     response_status: None,
                     organizer: false,
+                    is_self: false,
                 })
                 .collect();
             ev

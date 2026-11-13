@@ -868,10 +868,15 @@ pub fn run() {
             calendar::calendar_status,
             calendar::calendar_set_ical_url,
             calendar::calendar_upcoming,
+            calendar::calendar_agenda,
+            calendar::calendar_current_other_name,
+            calendar::calendar_home_meetings,
             calendar::calendar_event_for_window,
             calendar::calendar_set_pending_event,
             calendar::calendar_dismiss_event,
             calendar::autorecord::get_calendar_record_mode,
+            calendar::autorecord::get_ignored_apps,
+            calendar::autorecord::set_ignored_apps,
             calendar::autorecord::set_calendar_record_mode,
         ])
         .build(tauri::generate_context!())

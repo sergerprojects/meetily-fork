@@ -230,6 +230,10 @@ fn check_updates_handler<R: Runtime>(app: &AppHandle<R>) {
 /// Poller hook: recompute the calendar section; rebuild the tray only when it
 /// changed (recording-state changes rebuild via update_tray_menu already).
 pub(crate) fn set_calendar_events<R: Runtime>(app: &AppHandle<R>, enabled: bool, events: &[CalendarEvent]) {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let title = if enabled { tray_title(events, Utc::now()) } else { None };
+        let _ = tray.set_title(title.as_deref());
+    }
     let entries = calendar_menu_entries(enabled, events, &Local::now());
     let changed = match CALENDAR_ENTRIES.lock() {
         Ok(mut cur) if *cur != entries => {
@@ -240,6 +244,36 @@ pub(crate) fn set_calendar_events<R: Runtime>(app: &AppHandle<R>, enabled: bool,
     };
     if changed {
         update_tray_menu(app);
+    }
+}
+
+/// Menu-bar text: "Weekly sync in 12m" (within 90 min) or "Weekly sync · now".
+/// Only real meetings (video link or 2+ attendees), never focus blocks.
+pub(crate) fn tray_title(events: &[CalendarEvent], now: DateTime<Utc>) -> Option<String> {
+    let (event, start) = events
+        .iter()
+        .filter(|e| e.video_url.is_some() || e.attendees.len() >= 2)
+        .filter_map(|e| e.bounds().map(|(s, end)| (e, s, end)))
+        .filter(|(_, _, end)| *end > now)
+        .min_by_key(|(_, s, _)| *s)
+        .map(|(e, s, _)| (e, s))?;
+    let name: String = {
+        let t = event.summary.trim();
+        if t.chars().count() > 18 {
+            format!("{}…", t.chars().take(17).collect::<String>().trim_end())
+        } else {
+            t.to_string()
+        }
+    };
+    if start <= now {
+        return Some(format!("{} · now", name));
+    }
+    let mins = (start - now).num_minutes();
+    match mins {
+        0 => Some(format!("{} in <1m", name)),
+        1..=59 => Some(format!("{} in {}m", name, mins)),
+        60..=90 => Some(format!("{} in {}h{:02}m", name, mins / 60, mins % 60)),
+        _ => None,
     }
 }
 
@@ -579,6 +613,22 @@ mod tests {
 
     fn est() -> FixedOffset {
         FixedOffset::west_opt(5 * 3600).unwrap()
+    }
+
+    #[test]
+    fn menu_bar_title_countdown() {
+        let now = DateTime::parse_from_rfc3339("2026-11-12T15:00:00Z").unwrap().with_timezone(&Utc);
+        let soon = ev("a", "Pricing review", "2026-11-12T15:12:00Z", "2026-11-12T15:42:00Z", true);
+        assert_eq!(tray_title(&[soon.clone()], now).as_deref(), Some("Pricing review in 12m"));
+        let live = ev("b", "Standup", "2026-11-12T14:50:00Z", "2026-11-12T15:20:00Z", true);
+        assert_eq!(tray_title(&[live, soon.clone()], now).as_deref(), Some("Standup · now"));
+        let far = ev("c", "Later", "2026-11-12T18:00:00Z", "2026-11-12T19:00:00Z", true);
+        assert_eq!(tray_title(&[far], now), None, "more than 90 min away: no title");
+        let focus = ev("d", "Focus time", "2026-11-12T15:05:00Z", "2026-11-12T16:00:00Z", false);
+        assert_eq!(tray_title(&[focus], now), None, "no video and no attendees: not a meeting");
+        let long = ev("e", "A very long meeting title here", "2026-11-12T15:30:00Z", "2026-11-12T16:00:00Z", true);
+        assert_eq!(tray_title(&[long], now).as_deref(), Some("A very long meeti… in 30m"));
+        assert_eq!(tray_title(&[], now), None);
     }
 
     #[test]

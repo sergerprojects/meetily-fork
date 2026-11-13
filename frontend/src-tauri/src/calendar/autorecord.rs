@@ -80,6 +80,32 @@ fn load_mode<R: Runtime>(app: &AppHandle<R>) -> RecordMode {
         .unwrap_or_default()
 }
 
+const IGNORED_KEY: &str = "ignored_apps";
+
+fn load_ignored_apps<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
+    app.store(super::ical::STORE_FILE)
+        .ok()
+        .and_then(|st| st.get(IGNORED_KEY))
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+        .unwrap_or_default()
+}
+
+/// Apps whose microphone use never counts as "joined a call".
+#[tauri::command]
+pub async fn get_ignored_apps<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
+    load_ignored_apps(&app)
+}
+
+#[tauri::command]
+pub async fn set_ignored_apps<R: Runtime>(app: AppHandle<R>, apps: Vec<String>) -> Result<(), String> {
+    let cleaned: Vec<String> = apps.iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
+    let store = app.store(super::ical::STORE_FILE).map_err(|e| format!("Failed to access store: {}", e))?;
+    store.set(IGNORED_KEY, serde_json::json!(cleaned));
+    store.save().map_err(|e| format!("Failed to save store: {}", e))?;
+    mic_activity::set_user_ignored(&cleaned);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn get_calendar_record_mode<R: Runtime>(app: AppHandle<R>) -> String {
     let mode = load_mode(&app);
@@ -258,6 +284,7 @@ pub fn start(app: AppHandle<Wry>) {
     if let Ok(mut m) = MODE.write() {
         *m = load_mode(&app);
     }
+    mic_activity::set_user_ignored(&load_ignored_apps(&app));
     tauri::async_runtime::spawn(async move {
         let cancel = CANCEL.clone();
         let mut debounce = MicDebounce::default();

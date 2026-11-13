@@ -10,7 +10,8 @@ import { useRecordingState } from '@/contexts/RecordingStateContext';
 import { usePermissionCheck } from '@/hooks/usePermissionCheck';
 import { ModalType } from '@/hooks/useModalState';
 import { useIsLinux } from '@/hooks/usePlatform';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { getCurrentOtherName } from '@/lib/calendar';
 
 /**
  * TranscriptPanel Component
@@ -38,6 +39,26 @@ export function TranscriptPanel({
   const { checkPermissions, isChecking, hasSystemAudio, hasMicrophone } = usePermissionCheck();
   const isLinux = useIsLinux();
 
+  // 1:1 on the calendar: show the other person by name instead of "Others".
+  const [otherName, setOtherName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isRecording) {
+      setOtherName(null);
+      return;
+    }
+    let active = true;
+    const refresh = async () => {
+      const name = await getCurrentOtherName();
+      if (active) setOtherName(name);
+    };
+    refresh();
+    const timer = setInterval(refresh, 30_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [isRecording]);
+
   // Convert transcripts to segments for virtualized view
   const segments = useMemo(() =>
     transcripts.map(t => ({
@@ -46,9 +67,9 @@ export function TranscriptPanel({
       endTime: t.audio_end_time,
       text: t.text,
       confidence: t.confidence,
-      speaker: t.speaker,
+      speaker: otherName && t.speaker === 'Others' ? otherName : t.speaker,
     })),
-    [transcripts]
+    [transcripts, otherName]
   );
 
   return (

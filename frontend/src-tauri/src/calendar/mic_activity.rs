@@ -11,6 +11,8 @@
 //! hold input permanently and are ignored by executable path.
 
 use chrono::{DateTime, Duration, Utc};
+use once_cell::sync::Lazy;
+use std::sync::RwLock;
 
 /// Mic must be in use continuously this long to count as "joined".
 pub const JOIN_AFTER: Duration = Duration::seconds(8);
@@ -80,9 +82,23 @@ const IGNORED_PATH_PREFIXES: &[&str] = &["/System/Library/", "/usr/libexec/", "/
 /// the mic even when not recording) must not count as "joined a call".
 const IGNORED_PATH_SUBSTRINGS: &[&str] = &["/Granola.app/", "/Granola Helper"];
 
+/// App names the user never wants join prompts for (lowercase substrings of the
+/// executable path), e.g. "discord", "facetime".
+static USER_IGNORED: Lazy<RwLock<Vec<String>>> = Lazy::new(|| RwLock::new(Vec::new()));
+
+pub fn set_user_ignored(apps: &[String]) {
+    if let Ok(mut v) = USER_IGNORED.write() {
+        *v = apps.iter().map(|a| a.trim().to_lowercase()).filter(|a| !a.is_empty()).collect();
+    }
+}
+
 pub fn is_ignored_input_process(path: &str) -> bool {
     IGNORED_PATH_PREFIXES.iter().any(|p| path.starts_with(p))
         || IGNORED_PATH_SUBSTRINGS.iter().any(|s| path.contains(s))
+        || {
+            let lower = path.to_lowercase();
+            USER_IGNORED.read().map_or(false, |v| v.iter().any(|a| lower.contains(a.as_str())))
+        }
 }
 
 #[cfg(target_os = "macos")]
@@ -280,6 +296,17 @@ mod tests {
         assert!(!is_ignored_input_process(
             "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper"
         ));
+    }
+
+    #[test]
+    fn user_ignored_apps_match_path_case_insensitively() {
+        let discord = "/Applications/Discord.app/Contents/MacOS/Discord";
+        assert!(!is_ignored_input_process(discord));
+        set_user_ignored(&[" Discord ".to_string(), "".to_string()]);
+        assert!(is_ignored_input_process(discord));
+        assert!(!is_ignored_input_process("/Applications/zoom.us.app/Contents/MacOS/zoom.us"));
+        set_user_ignored(&[]);
+        assert!(!is_ignored_input_process(discord));
     }
 
     #[test]

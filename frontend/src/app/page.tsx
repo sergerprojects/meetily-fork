@@ -11,6 +11,7 @@ import { StatusOverlays } from '@/app/_components/StatusOverlays';
 import Analytics from '@/lib/analytics';
 import { SettingsModals } from './_components/SettingsModal';
 import { TranscriptPanel } from './_components/TranscriptPanel';
+import { HomeView } from '@/components/Home/HomeView';
 import { useModalState } from '@/hooks/useModalState';
 import { useRecordingStateSync } from '@/hooks/useRecordingStateSync';
 import { useRecordingStart } from '@/hooks/useRecordingStart';
@@ -28,7 +29,7 @@ export default function Home() {
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
 
   // Use contexts for state management
-  const { meetingTitle } = useTranscripts();
+  const { meetingTitle, transcripts } = useTranscripts();
   const { transcriptModelConfig, selectedDevices } = useConfig();
   const recordingState = useRecordingState();
 
@@ -187,6 +188,13 @@ export default function Home() {
 
   // Computed values using global status
   const isProcessingStop = status === RecordingStatus.PROCESSING_TRANSCRIPTS || isProcessing;
+  // Idle (nothing recording, saving or on screen): show the Home overview instead of an empty transcript.
+  const showHome =
+    !recordingState.isRecording &&
+    !isProcessingStop &&
+    !isStopping &&
+    status !== RecordingStatus.SAVING &&
+    transcripts.length === 0;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -207,11 +215,15 @@ export default function Home() {
         onLoadPreview={loadMeetingTranscripts}
       />
       <div className="flex flex-1 overflow-hidden">
-        <TranscriptPanel
-          isProcessingStop={isProcessingStop}
-          isStopping={isStopping}
-          showModal={showModal}
-        />
+        {showHome ? (
+          <HomeView />
+        ) : (
+          <TranscriptPanel
+            isProcessingStop={isProcessingStop}
+            isStopping={isStopping}
+            showModal={showModal}
+          />
+        )}
 
         {/* Recording controls - only show when permissions are granted or already recording and not showing status messages */}
         {(hasMicrophone || isRecording) &&
