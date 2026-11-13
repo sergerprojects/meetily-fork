@@ -18,11 +18,11 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
               ref={ref}
               type="button"
               className="flex items-center justify-center mb-2 cursor-pointer bg-transparent border-none p-0 hover:opacity-80 transition-opacity"
-              aria-label="About Meetily"
+              aria-label="About Graphite"
             >
               <Image
                 src="/logo-collapsed.png"
-                alt="Meetily"
+                alt="Graphite"
                 width={40}
                 height={40}
                 className="object-contain"
@@ -36,9 +36,9 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
               ref={ref}
               type="button"
               className="w-full text-lg text-center border rounded-full bg-blue-50 border-white font-semibold text-gray-700 mb-2 block items-center cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              aria-label="About Meetily"
+              aria-label="About Graphite"
             >
-              <span>Meetily</span>
+              <span>Graphite</span>
             </button>
           </DialogTrigger>
         )}

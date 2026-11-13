@@ -54,7 +54,7 @@ export function About() {
                 <div className="mb-3">
                     <Image
                         src="icon_128x128.png"
-                        alt="Meetily Logo"
+                        alt="Graphite"
                         width={64}
                         height={64}
                         className="mx-auto"
@@ -64,6 +64,9 @@ export function About() {
                 <span className="text-sm text-gray-500"> v{currentVersion}</span>
                 <p className="text-medium text-gray-600 mt-1">
                     Real-time notes and summaries that never leave your machine.
+                </p>
+                <p className="mt-1 text-xs text-gray-400">
+                    Graphite is a fork of Meetily by Zackriya Solutions, used under the MIT License.
                 </p>
                 <div className="mt-3">
                     <Button
@@ -95,7 +98,7 @@ export function About() {
 
             {/* Features Grid - Compact */}
             <div className="space-y-3">
-                <h2 className="text-base font-semibold text-gray-800">What makes Meetily different</h2>
+                <h2 className="text-base font-semibold text-gray-800">About Graphite</h2>
                 <div className="grid grid-cols-2 gap-2">
                     <div className="bg-gray-50 rounded p-3 hover:bg-gray-100 transition-colors">
                         <h3 className="font-bold text-sm text-gray-900 mb-1">Privacy-first</h3>

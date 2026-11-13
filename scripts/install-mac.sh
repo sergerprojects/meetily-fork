@@ -30,19 +30,19 @@ echo "==> 3/4 app bundle"
 (cd frontend && CARGO_PROFILE_RELEASE_STRIP=none CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON \
   npx pnpm@10 run tauri:build -- --bundles app) || echo "(build command exited non-zero; checking for the bundle)"
 
-APP="$ROOT/target/release/bundle/macos/meetily.app"
+APP="$ROOT/target/release/bundle/macos/Graphite.app"
 [ -d "$APP" ] || fail "bundle not found at $APP - read the build output above"
 
 echo "==> 4/4 install to /Applications"
-osascript -e 'tell application "meetily" to quit' >/dev/null 2>&1 || true
+osascript -e 'tell application "Graphite" to quit' >/dev/null 2>&1 || true
 for _ in $(seq 1 15); do pgrep -x meetily >/dev/null || break; sleep 1; done
-if [ -d /Applications/meetily.app ]; then
+if [ -d /Applications/Graphite.app ]; then
   mkdir -p "$HOME/meetily-backup"
   rm -rf "$HOME/meetily-backup/meetily-previous.app"
-  cp -R /Applications/meetily.app "$HOME/meetily-backup/meetily-previous.app"
-  rm -rf /Applications/meetily.app
+  cp -R /Applications/Graphite.app "$HOME/meetily-backup/meetily-previous.app"
+  rm -rf /Applications/Graphite.app
 fi
-cp -R "$APP" /Applications/meetily.app
-xattr -cr /Applications/meetily.app   # unsigned build: clear quarantine
-open /Applications/meetily.app
+cp -R "$APP" /Applications/Graphite.app
+xattr -cr /Applications/Graphite.app   # unsigned build: clear quarantine
+open /Applications/Graphite.app
 echo "Done. Meetily is running (menu bar) and will launch at login."

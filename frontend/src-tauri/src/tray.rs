@@ -43,7 +43,7 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
-        .tooltip("Meetily")
+        .tooltip("Graphite")
         .icon(app.default_window_icon().unwrap().clone())
         .on_menu_event(|app, event| handle_menu_event(app, event.id.as_ref()))
         .build(app)?;
@@ -190,7 +190,7 @@ pub(crate) async fn stop_recording_and_save<R: Runtime>(app: &AppHandle<R>) -> R
     }
 }
 
-/// Tray click on a calendar event: open Meetily and start a recording named
+/// Tray click on a calendar event: open Graphite and start a recording named
 /// after the event via the frontend's normal start path.
 fn record_calendar_event_handler<R: Runtime>(app: &AppHandle<R>, event_id: String) {
     focus_main_window(app);
@@ -562,7 +562,7 @@ fn build_menu<R: Runtime>(
     }
 
     builder
-        .item(&MenuItemBuilder::with_id("open_window", "Open Meetily").build(app)?)
+        .item(&MenuItemBuilder::with_id("open_window", "Open Graphite").build(app)?)
         .item(&MenuItemBuilder::with_id("settings", "Settings").build(app)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("quit", "Quit").build(app)?)

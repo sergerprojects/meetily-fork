@@ -1,6 +1,6 @@
-> ## About this fork
+> ## About this fork (Graphite)
 >
-> This is an **unofficial, community fork** of [Meetily](https://github.com/Zackriya-Solutions/meetily) by [Zackriya Solutions](https://www.zackriya.com), used under the MIT License. All credit for the app, the on-device transcription pipeline and the original design goes to the Meetily authors and contributors. This fork is **not affiliated with, endorsed by, or supported by Zackriya Solutions**; the Meetily name and logo are theirs. If you want the maintained product, use [upstream](https://github.com/Zackriya-Solutions/meetily) and its [releases](https://github.com/Zackriya-Solutions/meetily/releases).
+> Graphite is an **unofficial, community fork** of [Meetily](https://github.com/Zackriya-Solutions/meetily) by [Zackriya Solutions](https://www.zackriya.com), used under the MIT License. All credit for the app, the on-device transcription pipeline and the original design goes to the Meetily authors and contributors. This fork is **not affiliated with, endorsed by, or supported by Zackriya Solutions**; the Meetily name and logo are theirs. If you want the maintained product, use [upstream](https://github.com/Zackriya-Solutions/meetily) and its [releases](https://github.com/Zackriya-Solutions/meetily/releases).
 >
 > Based on upstream commit `07c4dfd` (v0.4.1). The original copyright notice is kept in [LICENSE.md](LICENSE.md); changes in this fork are released under the same MIT License, with no warranty.
 >
