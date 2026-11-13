@@ -67,6 +67,18 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 - Settings → Recording shows the connected source, and "Launch at login" is on.
 - "When I join a meeting" defaults to **Ask me**. Switch to **Record automatically** only if the person wants it and has the right to record their calls (company policy, other participants' consent).
 
+## 4. Speaker names (optional)
+
+The app labels lines "You" (microphone) and "Others" (everyone else). `tools/diarize_meeting.py` goes further on-device: it separates the "Others" audio into Speaker 1, Speaker 2, ... by voice. It needs the meeting's `audio.mp4`, so Settings -> Recording -> save audio must be on.
+
+```bash
+python3 -m venv ~/.meetily/venv && ~/.meetily/venv/bin/pip install sherpa-onnx numpy
+~/.meetily/venv/bin/python tools/diarize_meeting.py --download-models   # ~32 MB from the k2-fsa/sherpa-onnx releases, once
+~/.meetily/venv/bin/python tools/diarize_meeting.py ~/Movies/meetily-recordings/<meeting folder>   # writes speakers.json
+```
+
+Turning "Speaker 2" into a person's name is left to you: match against the calendar attendee list (`calendar_event` in the meeting's `metadata.json`) using what is said in the meeting ("thanks, Sam", self-introductions). Only apply a name when the dialogue says so; otherwise keep "Speaker N". Measured so far: separates you from one other voice well; with several similar voices it can merge or split people. Treat labels as best guesses.
+
 ## Notes
 
 - Recordings: `~/Movies/meetily-recordings/`. Database: `~/Library/Application Support/com.meetily.ai/meeting_minutes.sqlite` (SQLite WAL: copy with `sqlite3 ... ".backup"`, never `cp`).
