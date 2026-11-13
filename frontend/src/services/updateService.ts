@@ -39,6 +39,12 @@ export class UpdateService {
    * @returns Promise with update information
    */
   async checkForUpdates(force = false): Promise<UpdateInfo> {
+    // FORK: auto-update disabled. Upstream releases would overwrite this fork
+    // (speaker labels, calendar). Re-enable only with our own endpoint + key.
+    if (process.env.NEXT_PUBLIC_ENABLE_UPDATER !== 'true') {
+      return { available: false, currentVersion: await getVersion() };
+    }
+
     // Prevent concurrent update checks
     if (this.updateCheckInProgress) {
       throw new Error('Update check already in progress');

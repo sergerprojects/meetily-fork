@@ -1,9 +1,29 @@
+use chrono::{DateTime, Duration, Local, TimeZone, Utc};
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 use tauri::{
     Emitter,
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::TrayIconBuilder,
     AppHandle, Manager, Runtime,
 };
+
+use crate::calendar::CalendarEvent;
+
+const CAL_EVENT_PREFIX: &str = "cal_event:";
+const TITLE_MAX_CHARS: usize = 45;
+
+/// One calendar line in the tray menu.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum CalendarMenuEntry {
+    Header(String),
+    Event { id: String, label: String },
+    Note(String),
+}
+
+/// Calendar section last computed by the poller (rendered by build_menu).
+static CALENDAR_ENTRIES: Lazy<Mutex<Vec<CalendarMenuEntry>>> =
+    Lazy::new(|| Mutex::new(vec![CalendarMenuEntry::Note("Calendar not connected".to_string())]));
 
 #[derive(Debug, Clone)]
 pub enum RecordingState {
@@ -40,6 +60,9 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         "pause_recording" => pause_recording_handler(app),
         "resume_recording" => resume_recording_handler(app),
         "stop_recording" => stop_recording_handler(app),
+        id if id.starts_with(CAL_EVENT_PREFIX) => {
+            record_calendar_event_handler(app, id[CAL_EVENT_PREFIX.len()..].to_string())
+        }
         "open_window" => focus_main_window(app),
         "settings" => {
             focus_main_window(app);
@@ -59,47 +82,9 @@ fn toggle_recording_handler<R: Runtime>(app: &AppHandle<R>) {
         if crate::is_recording().await {
             // Immediately show stopping state
             set_tray_state(&app_clone, RecordingState::Stopping);
-
             log::info!("Tray toggle: Stopping recording...");
-
-            // Generate save path (same as RecordingControls.tsx)
-            let data_dir = match app_clone.path().app_data_dir() {
-                Ok(dir) => dir,
-                Err(e) => {
-                    log::error!("Failed to get app data dir: {}", e);
-                    update_tray_menu_async(&app_clone).await;
-                    return;
-                }
-            };
-
-            let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
-            let save_path = data_dir.join(format!("recording-{}.wav", timestamp));
-
-            // Call Rust stop_recording command (like pause/resume pattern)
-            let stop_result = crate::audio::recording_commands::stop_recording(
-                app_clone.clone(),
-                crate::audio::recording_commands::RecordingArgs {
-                    save_path: save_path.to_string_lossy().to_string(),
-                },
-            )
-            .await;
-
-            // Handle result
-            match stop_result {
-                Ok(_) => {
-                    log::info!("Tray toggle: Recording stopped successfully");
-
-                    // Trigger frontend post-processing via event (works from any page)
-                    // (SQLite save, navigation, analytics)
-                    if let Err(e) = app_clone.emit("recording-stop-complete", true) {
-                        log::error!("Tray toggle: Failed to emit recording-stop-complete event: {}", e);
-                    }
-                }
-                Err(e) => {
-                    log::error!("Tray toggle: Failed to stop recording: {}", e);
-                    // Revert tray state on error
-                    update_tray_menu_async(&app_clone).await;
-                }
+            if let Err(e) = stop_recording_and_save(&app_clone).await {
+                log::error!("Tray toggle: {}", e);
             }
         } else {
             // Immediately show starting state
@@ -157,45 +142,78 @@ fn stop_recording_handler<R: Runtime>(app: &AppHandle<R>) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
         log::info!("Tray: Stopping recording...");
+        if let Err(e) = stop_recording_and_save(&app_clone).await {
+            log::error!("Tray: {}", e);
+        }
+    });
+}
 
-        // Generate save path (same as RecordingControls.tsx)
-        let data_dir = match app_clone.path().app_data_dir() {
-            Ok(dir) => dir,
-            Err(e) => {
-                log::error!("Failed to get app data dir: {}", e);
-                update_tray_menu_async(&app_clone).await;
-                return;
+/// Stop the recording from Rust and hand off to the frontend save flow
+/// (`recording-stop-complete` -> RecordingPostProcessingProvider: SQLite save,
+/// navigation, analytics). Shared by the tray and calendar auto-stop.
+pub(crate) async fn stop_recording_and_save<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    // Generate save path (same as RecordingControls.tsx)
+    let data_dir = match app.path().app_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            update_tray_menu_async(app).await;
+            return Err(format!("Failed to get app data dir: {}", e));
+        }
+    };
+
+    let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
+    let save_path = data_dir.join(format!("recording-{}.wav", timestamp));
+
+    // Call Rust stop_recording command (like pause/resume pattern)
+    let stop_result = crate::audio::recording_commands::stop_recording(
+        app.clone(),
+        crate::audio::recording_commands::RecordingArgs {
+            save_path: save_path.to_string_lossy().to_string(),
+        },
+    )
+    .await;
+
+    match stop_result {
+        Ok(_) => {
+            log::info!("Tray: Recording stopped successfully");
+            // Trigger frontend post-processing via event (works from any page)
+            if let Err(e) = app.emit("recording-stop-complete", true) {
+                log::error!("Tray: Failed to emit recording-stop-complete event: {}", e);
             }
+            Ok(())
+        }
+        Err(e) => {
+            // Revert tray state on error
+            update_tray_menu_async(app).await;
+            Err(format!("Failed to stop recording: {}", e))
+        }
+    }
+}
+
+/// Tray click on a calendar event: open Meetily and start a recording named
+/// after the event via the frontend's normal start path.
+fn record_calendar_event_handler<R: Runtime>(app: &AppHandle<R>, event_id: String) {
+    focus_main_window(app);
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if crate::audio::recording_commands::is_recording().await {
+            log::info!("Tray: already recording, ignoring calendar event click");
+            return;
+        }
+        let event = crate::calendar::STATE
+            .upcoming
+            .read()
+            .await
+            .iter()
+            .find(|e| e.id == event_id)
+            .cloned();
+        let Some(event) = event else {
+            log::warn!("Tray: calendar event {} no longer cached", event_id);
+            return;
         };
-
-        let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
-        let save_path = data_dir.join(format!("recording-{}.wav", timestamp));
-
-        // Call Rust stop_recording command (like pause/resume pattern)
-        let stop_result = crate::audio::recording_commands::stop_recording(
-            app_clone.clone(),
-            crate::audio::recording_commands::RecordingArgs {
-                save_path: save_path.to_string_lossy().to_string(),
-            },
-        )
-        .await;
-
-        // Handle result
-        match stop_result {
-            Ok(_) => {
-                log::info!("Tray: Recording stopped successfully");
-
-                // Trigger frontend post-processing via event (works from any page)
-                // (SQLite save, navigation, analytics)
-                if let Err(e) = app_clone.emit("recording-stop-complete", true) {
-                    log::error!("Tray: Failed to emit recording-stop-complete event: {}", e);
-                }
-            }
-            Err(e) => {
-                log::error!("Tray: Failed to stop recording: {}", e);
-                // Revert tray state on error
-                update_tray_menu_async(&app_clone).await;
-            }
+        let payload = serde_json::json!({ "event": &event, "title": &event.summary });
+        if let Err(e) = app_clone.emit(crate::calendar::autorecord::RECORD_REQUEST_EVENT, payload) {
+            log::error!("Tray: failed to emit calendar record request: {}", e);
         }
     });
 }
@@ -207,6 +225,116 @@ fn check_updates_handler<R: Runtime>(app: &AppHandle<R>) {
             "window.dispatchEvent(new CustomEvent('check-updates-from-tray'))"
         );
     }
+}
+
+/// Poller hook: recompute the calendar section; rebuild the tray only when it
+/// changed (recording-state changes rebuild via update_tray_menu already).
+pub(crate) fn set_calendar_events<R: Runtime>(app: &AppHandle<R>, enabled: bool, events: &[CalendarEvent]) {
+    let entries = calendar_menu_entries(enabled, events, &Local::now());
+    let changed = match CALENDAR_ENTRIES.lock() {
+        Ok(mut cur) if *cur != entries => {
+            *cur = entries;
+            true
+        }
+        _ => false,
+    };
+    if changed {
+        update_tray_menu(app);
+    }
+}
+
+/// "9:30–10:00 AM" (same meridiem) or "11:30 AM–12:30 PM".
+pub(crate) fn format_time_range<Tz: TimeZone>(start: &DateTime<Tz>, end: &DateTime<Tz>) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let (sh, sp) = (start.format("%-I:%M").to_string(), start.format("%p").to_string());
+    let (eh, ep) = (end.format("%-I:%M").to_string(), end.format("%p").to_string());
+    if sp == ep {
+        format!("{}–{} {}", sh, eh, ep)
+    } else {
+        format!("{} {}–{} {}", sh, sp, eh, ep)
+    }
+}
+
+fn truncate_title(title: &str) -> String {
+    if title.chars().count() <= TITLE_MAX_CHARS {
+        title.to_string()
+    } else {
+        let cut: String = title.chars().take(TITLE_MAX_CHARS - 1).collect();
+        format!("{}…", cut.trim_end())
+    }
+}
+
+/// "▶ Title  ·  9:30–10:00 AM" (in progress), "● …" (has video link), else plain.
+pub(crate) fn event_label<Tz: TimeZone>(event: &CalendarEvent, now: &DateTime<Tz>) -> Option<String>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let (start, end) = event.bounds()?;
+    let tz = now.timezone();
+    let now_utc = now.with_timezone(&Utc);
+    let prefix = if start <= now_utc && now_utc < end {
+        "▶ "
+    } else if event.video_url.is_some() {
+        "● "
+    } else {
+        ""
+    };
+    Some(format!(
+        "{}{}  ·  {}",
+        prefix,
+        truncate_title(&event.summary),
+        format_time_range(&start.with_timezone(&tz), &end.with_timezone(&tz))
+    ))
+}
+
+/// Today / Tomorrow sections (local days of `now`). Ended events are dropped;
+/// an in-progress event that began yesterday counts as today.
+pub(crate) fn calendar_menu_entries<Tz: TimeZone>(
+    enabled: bool,
+    events: &[CalendarEvent],
+    now: &DateTime<Tz>,
+) -> Vec<CalendarMenuEntry>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    if !enabled {
+        return vec![CalendarMenuEntry::Note("Calendar not connected".to_string())];
+    }
+    let tz = now.timezone();
+    let today = now.date_naive();
+    let tomorrow = today + Duration::days(1);
+    let now_utc = now.with_timezone(&Utc);
+
+    let mut live: Vec<(&CalendarEvent, DateTime<Utc>)> = events
+        .iter()
+        .filter_map(|e| e.bounds().map(|(s, end)| (e, s, end)))
+        .filter(|(_, _, end)| *end > now_utc)
+        .map(|(e, s, _)| (e, s))
+        .collect();
+    live.sort_by_key(|(_, s)| *s);
+
+    let mut out = Vec::new();
+    for (header, day, empty) in [("Today", today, "No more meetings today"), ("Tomorrow", tomorrow, "No meetings")] {
+        out.push(CalendarMenuEntry::Header(header.to_string()));
+        let mut any = false;
+        for (e, s) in &live {
+            let d = s.with_timezone(&tz).date_naive();
+            let in_day = if day == today { d <= today } else { d == day };
+            if !in_day {
+                continue;
+            }
+            if let Some(label) = event_label(e, now) {
+                out.push(CalendarMenuEntry::Event { id: e.id.clone(), label });
+                any = true;
+            }
+        }
+        if !any {
+            out.push(CalendarMenuEntry::Note(empty.to_string()));
+        }
+    }
+    out
 }
 
 pub fn update_tray_menu<R: Runtime>(app: &AppHandle<R>) {
@@ -320,6 +448,24 @@ fn build_menu<R: Runtime>(
 ) -> tauri::Result<tauri::menu::Menu<R>> {
     let mut builder = MenuBuilder::new(app);
 
+    // Calendar section (Granola-style): Today / Tomorrow headers + events.
+    let entries = CALENDAR_ENTRIES.lock().map(|e| e.clone()).unwrap_or_default();
+    for entry in &entries {
+        builder = match entry {
+            CalendarMenuEntry::Header(text) | CalendarMenuEntry::Note(text) => {
+                builder.item(&MenuItemBuilder::new(text.as_str()).enabled(false).build(app)?)
+            }
+            CalendarMenuEntry::Event { id, label } => builder.item(
+                &MenuItemBuilder::with_id(format!("{}{}", CAL_EVENT_PREFIX, id), label.as_str())
+                    .enabled(can_record)
+                    .build(app)?,
+            ),
+        };
+    }
+    if !entries.is_empty() {
+        builder = builder.item(&PredefinedMenuItem::separator(app)?);
+    }
+
     // If recording is not allowed (during onboarding, no transcription model), show disabled message
     if !can_record {
         builder = builder.item(
@@ -382,10 +528,8 @@ fn build_menu<R: Runtime>(
     }
 
     builder
-        .item(&PredefinedMenuItem::separator(app)?)
-        .item(&MenuItemBuilder::with_id("open_window", "Open Main Window").build(app)?)
+        .item(&MenuItemBuilder::with_id("open_window", "Open Meetily").build(app)?)
         .item(&MenuItemBuilder::with_id("settings", "Settings").build(app)?)
-        .item(&MenuItemBuilder::with_id("check_updates", "Check for Updates").build(app)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("quit", "Quit").build(app)?)
         .build()
@@ -410,5 +554,102 @@ pub(crate) fn focus_main_window<R: Runtime>(app: &AppHandle<R>) {
         }
     } else {
         log::warn!("Could not find main window");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::FixedOffset;
+
+    fn ev(id: &str, title: &str, start: &str, end: &str, video: bool) -> CalendarEvent {
+        CalendarEvent {
+            id: id.to_string(),
+            summary: title.to_string(),
+            start: start.to_string(),
+            end: end.to_string(),
+            attendees: vec![],
+            organizer: None,
+            html_link: None,
+            location: None,
+            description: None,
+            video_url: video.then(|| "https://zoom.us/j/1".to_string()),
+        }
+    }
+
+    fn est() -> FixedOffset {
+        FixedOffset::west_opt(5 * 3600).unwrap()
+    }
+
+    #[test]
+    fn time_range_formatting() {
+        let tz = est();
+        let t = |h, m| tz.with_ymd_and_hms(2026, 11, 12, h, m, 0).unwrap();
+        assert_eq!(format_time_range(&t(9, 30), &t(10, 0)), "9:30–10:00 AM");
+        assert_eq!(format_time_range(&t(11, 30), &t(12, 30)), "11:30 AM–12:30 PM");
+        assert_eq!(format_time_range(&t(13, 5), &t(14, 0)), "1:05–2:00 PM");
+    }
+
+    #[test]
+    fn labels_prefixes_and_truncation() {
+        let now = est().with_ymd_and_hms(2026, 11, 12, 9, 45, 0).unwrap();
+        let live = ev("a", "Standup", "2026-11-12T09:30:00-05:00", "2026-11-12T10:00:00-05:00", true);
+        let video = ev("b", "1:1", "2026-11-12T15:30:00Z", "2026-11-12T16:00:00Z", true);
+        let plain = ev("c", "Lunch", "2026-11-12T12:00:00-05:00", "2026-11-12T13:00:00-05:00", false);
+        assert_eq!(event_label(&live, &now).unwrap(), "▶ Standup  ·  9:30–10:00 AM");
+        assert_eq!(event_label(&video, &now).unwrap(), "● 1:1  ·  10:30–11:00 AM");
+        assert_eq!(event_label(&plain, &now).unwrap(), "Lunch  ·  12:00–1:00 PM");
+        let long = ev("d", &"x".repeat(80), "2026-11-12T12:00:00-05:00", "2026-11-12T13:00:00-05:00", false);
+        let label = event_label(&long, &now).unwrap();
+        assert!(label.starts_with(&format!("{}…  ·", "x".repeat(44))), "{}", label);
+    }
+
+    #[test]
+    fn today_tomorrow_grouping_in_local_time() {
+        // 10:00 PM EST on the 12th = 03:00Z on the 13th.
+        let now = est().with_ymd_and_hms(2026, 11, 12, 22, 0, 0).unwrap();
+        let events = vec![
+            ev("ended", "Ended", "2026-11-12T20:00:00-05:00", "2026-11-12T21:00:00-05:00", true),
+            // Started yesterday-local, still running.
+            ev("overnight", "Overnight", "2026-11-11T23:00:00-05:00", "2026-11-12T23:00:00-05:00", false),
+            // 11:30 PM local today (04:30Z next UTC day) -> Today.
+            ev("late", "Late", "2026-11-13T04:30:00Z", "2026-11-13T05:00:00Z", true),
+            // 00:30 local tomorrow -> Tomorrow.
+            ev("early", "Early", "2026-11-13T05:30:00Z", "2026-11-13T06:00:00Z", false),
+            // Day after tomorrow -> dropped.
+            ev("far", "Far", "2026-11-14T15:00:00Z", "2026-11-14T16:00:00Z", false),
+        ];
+        let entries = calendar_menu_entries(true, &events, &now);
+        let ids: Vec<String> = entries
+            .iter()
+            .map(|e| match e {
+                CalendarMenuEntry::Header(h) => format!("#{}", h),
+                CalendarMenuEntry::Event { id, .. } => id.clone(),
+                CalendarMenuEntry::Note(n) => format!("({})", n),
+            })
+            .collect();
+        assert_eq!(ids, vec!["#Today", "overnight", "late", "#Tomorrow", "early"]);
+        match &entries[1] {
+            CalendarMenuEntry::Event { label, .. } => assert!(label.starts_with("▶ Overnight")),
+            other => panic!("unexpected {:?}", other),
+        }
+    }
+
+    #[test]
+    fn empty_and_disabled_sections() {
+        let now = est().with_ymd_and_hms(2026, 11, 12, 9, 0, 0).unwrap();
+        assert_eq!(
+            calendar_menu_entries(false, &[], &now),
+            vec![CalendarMenuEntry::Note("Calendar not connected".into())]
+        );
+        assert_eq!(
+            calendar_menu_entries(true, &[], &now),
+            vec![
+                CalendarMenuEntry::Header("Today".into()),
+                CalendarMenuEntry::Note("No more meetings today".into()),
+                CalendarMenuEntry::Header("Tomorrow".into()),
+                CalendarMenuEntry::Note("No meetings".into()),
+            ]
+        );
     }
 }

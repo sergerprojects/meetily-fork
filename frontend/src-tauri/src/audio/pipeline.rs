@@ -26,6 +26,61 @@ use super::vad::{ContinuousVadProcessor};
 /// during continuous speech is tracked separately in #756.
 const VAD_REDEMPTION_TIME_MS: u32 = 500;
 
+/// Speaker labelling: a VAD segment is labelled "You" (Microphone) only when
+/// the mic energy over the segment exceeds the system-audio energy by this
+/// factor; otherwise it is "Others" (System). Biased toward Others because
+/// speaker bleed into the mic, plus the mic's -23 LUFS normalization, can
+/// inflate mic energy while someone else is talking. Tune with the per-segment
+/// energy log line in `AudioPipeline::label_speaker`.
+const SPEAKER_RATIO: f64 = 1.5;
+
+/// Combined (mic + system) mean-square energy below which a segment is treated
+/// as silence and labelled Others.
+const SPEAKER_SILENCE_ENERGY: f64 = 1e-10;
+
+/// Mean-square energy of a window of samples.
+fn mean_square(samples: &[f32]) -> f64 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    samples.iter().map(|&x| (x as f64) * (x as f64)).sum::<f64>() / samples.len() as f64
+}
+
+/// Sum per-window (mic, system) energies over the windows overlapping
+/// [start_ms, end_ms], weighted by overlap. Windows are contiguous, each
+/// `window_ms` long, starting at 0ms.
+fn segment_energies(energies: &[(f64, f64)], window_ms: f64, start_ms: f64, end_ms: f64) -> (f64, f64) {
+    if window_ms <= 0.0 || end_ms <= start_ms || energies.is_empty() {
+        return (0.0, 0.0);
+    }
+    let first = (start_ms.max(0.0) / window_ms).floor() as usize;
+    let last = ((end_ms / window_ms).ceil() as usize).min(energies.len());
+    let (mut mic_e, mut sys_e) = (0.0, 0.0);
+    for (i, &(mic, sys)) in energies.iter().enumerate().take(last).skip(first) {
+        let w_start = i as f64 * window_ms;
+        let w_end = w_start + window_ms;
+        let overlap = (end_ms.min(w_end) - start_ms.max(w_start)).max(0.0) / window_ms;
+        mic_e += mic * overlap;
+        sys_e += sys * overlap;
+    }
+    (mic_e, sys_e)
+}
+
+/// Label a speech segment by which stream dominated it:
+/// Microphone ("You") if mic energy > SPEAKER_RATIO * system energy, else
+/// System ("Others"). Silence defaults to System.
+fn label_segment_speaker(energies: &[(f64, f64)], window_ms: f64, start_ms: f64, end_ms: f64) -> DeviceType {
+    let (mic_e, sys_e) = segment_energies(energies, window_ms, start_ms, end_ms);
+    if mic_e + sys_e < SPEAKER_SILENCE_ENERGY {
+        return DeviceType::System;
+    }
+    if mic_e > SPEAKER_RATIO * sys_e {
+        DeviceType::Microphone
+    } else {
+        DeviceType::System
+    }
+}
+
 /// Ring buffer for synchronized audio mixing
 /// Accumulates samples from mic and system streams until we have aligned windows
 struct AudioMixerRingBuffer {
@@ -33,6 +88,7 @@ struct AudioMixerRingBuffer {
     system_buffer: VecDeque<f32>,
     window_size_samples: usize,  // Fixed mixing window (e.g., 50ms)
     max_buffer_size: usize,  // Safety limit (e.g., 100ms)
+    window_ms: f64,  // Duration of one mixing window, derived from window_size_samples
 }
 
 impl AudioMixerRingBuffer {
@@ -56,6 +112,7 @@ impl AudioMixerRingBuffer {
             system_buffer: VecDeque::with_capacity(max_buffer_size),
             window_size_samples,
             max_buffer_size,
+            window_ms: window_size_samples as f64 * 1000.0 / sample_rate as f64,
         }
     }
 
@@ -707,6 +764,9 @@ pub struct AudioPipeline {
     mixer: ProfessionalAudioMixer,
     // Recording sender for pre-mixed audio
     recording_sender_for_mixed: Option<mpsc::UnboundedSender<AudioChunk>>,
+    // Per mixed window (mic, system) mean-square energy, indexed by window number,
+    // used to label VAD segments as You (mic) / Others (system)
+    window_energies: Vec<(f64, f64)>,
 }
 
 impl AudioPipeline {
@@ -785,6 +845,7 @@ impl AudioPipeline {
             ring_buffer,
             mixer,
             recording_sender_for_mixed: None,  // Will be set by manager
+            window_energies: Vec::new(),
         })
     }
 
@@ -847,6 +908,9 @@ impl AudioPipeline {
                     // STEP 2: Mix audio in fixed windows when both streams have sufficient data
                     while self.ring_buffer.can_mix() {
                         if let Some((mic_window, sys_window)) = self.ring_buffer.extract_window() {
+                            // Record per-stream energy for speaker labelling
+                            self.window_energies.push((mean_square(&mic_window), mean_square(&sys_window)));
+
                             // Simple mixing without aggressive ducking
                             let mixed_clean = self.mixer.mix_window(&mic_window, &sys_window);
 
@@ -866,12 +930,13 @@ impl AudioPipeline {
                                             info!("📤 Sending VAD segment: {:.1}ms, {} samples",
                                                   duration_ms, segment.samples.len());
 
+                                            let speaker = self.label_speaker(segment.start_timestamp_ms, segment.end_timestamp_ms);
                                             let transcription_chunk = AudioChunk {
                                                 data: segment.samples,
                                                 sample_rate: 16000,
                                                 timestamp: segment.start_timestamp_ms / 1000.0,
                                                 chunk_id: self.chunk_id_counter,
-                                                device_type: DeviceType::Microphone,  // Mixed audio
+                                                device_type: speaker,  // Mixed audio, labelled by dominant stream
                                             };
 
                                             if let Err(e) = self.transcription_sender.send(transcription_chunk) {
@@ -936,12 +1001,13 @@ impl AudioPipeline {
                         info!("📤 Sending final VAD segment to Whisper: {:.1}ms duration, {} samples",
                               duration_ms, segment.samples.len());
 
+                        let speaker = self.label_speaker(segment.start_timestamp_ms, segment.end_timestamp_ms);
                         let transcription_chunk = AudioChunk {
                             data: segment.samples,
                             sample_rate: 16000,
                             timestamp: segment.start_timestamp_ms / 1000.0,
                             chunk_id: self.chunk_id_counter,
-                            device_type: DeviceType::Microphone,
+                            device_type: speaker,
                         };
 
                         if let Err(e) = self.transcription_sender.send(transcription_chunk) {
@@ -963,6 +1029,15 @@ impl AudioPipeline {
         Ok(())
     }
 
+    /// Label a VAD segment You/Others from the recorded per-window energies.
+    fn label_speaker(&self, start_ms: f64, end_ms: f64) -> DeviceType {
+        let window_ms = self.ring_buffer.window_ms;
+        let (mic_e, sys_e) = segment_energies(&self.window_energies, window_ms, start_ms, end_ms);
+        let label = label_segment_speaker(&self.window_energies, window_ms, start_ms, end_ms);
+        info!("🗣️ Speaker label {:?} for segment {:.0}-{:.0}ms: mic_e={:.3e}, sys_e={:.3e} (ratio={})",
+              label, start_ms, end_ms, mic_e, sys_e, SPEAKER_RATIO);
+        label
+    }
 }
 
 /// Simple audio pipeline manager
@@ -1112,5 +1187,44 @@ mod tests {
         // uninterrupted speech. Batch import/retranscription use 2000ms.
         // See #679 and #756.
         assert_eq!(VAD_REDEMPTION_TIME_MS, 500);
+    }
+
+    const W: f64 = 600.0;
+
+    #[test]
+    fn test_speaker_label_mic_dominant() {
+        let e = vec![(0.01, 0.001); 5];
+        assert_eq!(label_segment_speaker(&e, W, 0.0, 3000.0), DeviceType::Microphone);
+    }
+
+    #[test]
+    fn test_speaker_label_system_dominant() {
+        let e = vec![(0.001, 0.01); 5];
+        assert_eq!(label_segment_speaker(&e, W, 0.0, 3000.0), DeviceType::System);
+        // Mic slightly louder but under the ratio (bleed) -> Others
+        let e = vec![(0.012, 0.01); 5];
+        assert_eq!(label_segment_speaker(&e, W, 0.0, 3000.0), DeviceType::System);
+    }
+
+    #[test]
+    fn test_speaker_label_silence_defaults_to_others() {
+        let e = vec![(0.0, 0.0); 5];
+        assert_eq!(label_segment_speaker(&e, W, 0.0, 3000.0), DeviceType::System);
+        // Segment past the recorded windows -> no energy -> Others
+        assert_eq!(label_segment_speaker(&e, W, 6000.0, 7000.0), DeviceType::System);
+    }
+
+    #[test]
+    fn test_speaker_label_segment_spanning_mixed_windows() {
+        // Windows 0-1 system talk, windows 2-4 mic talk
+        let e = vec![(0.0, 0.01), (0.0, 0.01), (0.02, 0.0), (0.02, 0.0), (0.02, 0.0)];
+        // Segment covering only the tail of window 1 and windows 2-4 -> mic dominates
+        assert_eq!(label_segment_speaker(&e, W, 1100.0, 3000.0), DeviceType::Microphone);
+        // Segment mostly in system windows with a sliver of mic -> Others
+        assert_eq!(label_segment_speaker(&e, W, 0.0, 1300.0), DeviceType::System);
+        // Partial overlap weighting: 100ms of window 1 counts 1/6
+        let (mic_e, sys_e) = segment_energies(&e, W, 1100.0, 1800.0);
+        assert!((sys_e - 0.01 / 6.0).abs() < 1e-12);
+        assert!((mic_e - 0.02).abs() < 1e-12);
     }
 }

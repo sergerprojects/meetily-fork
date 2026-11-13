@@ -38,6 +38,7 @@ pub(crate) use perf_trace;
 pub mod analytics;
 pub mod api;
 pub mod audio;
+pub mod calendar;
 pub mod config;
 pub mod console_utils;
 pub mod database;
@@ -468,6 +469,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // FORK: launch at login (LaunchAgent). Login launches pass --autostart
+        // so the window stays hidden and Meetily lives in the menu bar.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--autostart"]),
+        ))
         .manage(whisper_engine::parallel_commands::ParallelProcessorState::new())
         .manage(Arc::new(RwLock::new(
             None::<notifications::manager::NotificationManager<tauri::Wry>>,
@@ -511,6 +518,29 @@ pub fn run() {
                 log::error!("Failed to create system tray: {}", e);
             }
 
+            // FORK: launch at login. Default ON the first time this build runs
+            // (user can turn it off in Settings); login launches start hidden.
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                use tauri_plugin_store::StoreExt;
+                if let Ok(store) = _app.handle().store("autostart.json") {
+                    if store.get("initialized").is_none() {
+                        match _app.autolaunch().enable() {
+                            Ok(()) => log::info!("Launch at login enabled (first run)"),
+                            Err(e) => log::warn!("Could not enable launch at login: {}", e),
+                        }
+                        store.set("initialized", serde_json::json!(true));
+                        let _ = store.save();
+                    }
+                }
+                if std::env::args().any(|a| a == "--autostart") {
+                    if let Some(w) = _app.get_webview_window("main") {
+                        let _ = w.hide();
+                        log::info!("Started at login: main window hidden");
+                    }
+                }
+            }
+
             // Initialize notification system with proper defaults
             log::info!("Initializing notification system...");
             let app_for_notif = _app.handle().clone();
@@ -536,6 +566,11 @@ pub fn run() {
                     }
                 }
             });
+
+            // Start Google Calendar poller (silently disabled without credentials)
+            calendar::poller::start(_app.handle().clone());
+            // Mic-activity "joined a call" watcher for auto-record (macOS only)
+            calendar::autorecord::start(_app.handle().clone());
 
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
@@ -830,6 +865,14 @@ pub fn run() {
             audio::import::start_import_audio_command,
             audio::import::cancel_import_command,
             audio::import::is_import_in_progress_command,
+            calendar::calendar_status,
+            calendar::calendar_set_ical_url,
+            calendar::calendar_upcoming,
+            calendar::calendar_event_for_window,
+            calendar::calendar_set_pending_event,
+            calendar::calendar_dismiss_event,
+            calendar::autorecord::get_calendar_record_mode,
+            calendar::autorecord::set_calendar_record_mode,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -841,6 +884,8 @@ pub fn run() {
                 }
                 tauri::RunEvent::Exit => {
                     log::info!("Application exiting, cleaning up resources...");
+                    calendar::poller::stop();
+                    calendar::autorecord::stop();
                     tauri::async_runtime::block_on(async {
                         // Clean up database connection and checkpoint WAL
                         if let Some(app_state) = _app_handle.try_state::<state::AppState>() {

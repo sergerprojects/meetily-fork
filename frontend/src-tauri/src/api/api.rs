@@ -137,6 +137,9 @@ pub struct MeetingTranscript {
     pub audio_end_time: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    // Speaker label: "You" (microphone) or "Others" (system audio)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }
 
 /// Meeting metadata without transcripts (for pagination)
@@ -188,6 +191,9 @@ pub struct TranscriptSegment {
     pub audio_end_time: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    // Speaker label: "You" (microphone) or "Others" (system audio)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -878,6 +884,7 @@ pub async fn api_get_meeting_transcripts<R: Runtime>(
                     audio_start_time: t.audio_start_time,
                     audio_end_time: t.audio_end_time,
                     duration: t.duration,
+                    speaker: t.speaker,
                 })
                 .collect::<Vec<_>>();
 
@@ -971,6 +978,7 @@ pub async fn api_save_transcript<R: Runtime>(
     }
 
     let pool = state.db_manager.pool();
+    let folder_path_for_calendar = folder_path.clone();
 
     // Now, call the repository with the correctly typed data.
     match TranscriptsRepository::save_transcript(
@@ -986,10 +994,19 @@ pub async fn api_save_transcript<R: Runtime>(
                 "Successfully saved transcript and created meeting with id: {}",
                 meeting_id
             );
+            // Attach calendar metadata (no-op when calendar is disabled; never fails the save)
+            let renamed_title = crate::calendar::attach_to_saved_meeting(
+                pool,
+                &meeting_id,
+                &meeting_title,
+                folder_path_for_calendar.as_deref(),
+            )
+            .await;
             Ok(serde_json::json!({
                 "status": "success",
                 "message": "Transcript saved successfully",
-                "meeting_id": meeting_id
+                "meeting_id": meeting_id,
+                "meeting_title": renamed_title.unwrap_or(meeting_title)
             }))
         }
         Err(e) => {

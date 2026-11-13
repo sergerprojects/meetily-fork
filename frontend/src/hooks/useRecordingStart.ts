@@ -7,6 +7,7 @@ import { useRecordingState, RecordingStatus } from '@/contexts/RecordingStateCon
 import { recordingService } from '@/services/recordingService';
 import Analytics from '@/lib/analytics';
 import { showRecordingNotification } from '@/lib/recordingNotification';
+import { consumeCalendarMeetingTitle } from '@/lib/calendar';
 import {
   getProviderCommands,
   hasDownloadingModel,
@@ -56,8 +57,12 @@ export function useRecordingStart(
   const { selectedDevices } = useConfig();
   const { setStatus } = useRecordingState();
 
-  // Generate meeting title with timestamp
+  // Generate meeting title with timestamp (or the calendar event title when
+  // the recording was started from a calendar prompt)
   const generateMeetingTitle = useCallback(() => {
+    const calendarTitle = consumeCalendarMeetingTitle();
+    if (calendarTitle) return calendarTitle;
+
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');

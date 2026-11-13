@@ -1,5 +1,6 @@
 import { VirtualizedTranscriptView } from '@/components/VirtualizedTranscriptView';
 import { PermissionWarning } from '@/components/PermissionWarning';
+import { UpcomingMeetings } from '@/components/Calendar/UpcomingMeetings';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { Copy, GlobeIcon } from 'lucide-react';
@@ -45,6 +46,7 @@ export function TranscriptPanel({
       endTime: t.audio_end_time,
       text: t.text,
       confidence: t.confidence,
+      speaker: t.speaker,
     })),
     [transcripts]
   );
@@ -98,6 +100,13 @@ export function TranscriptPanel({
             onRecheck={checkPermissions}
             isRechecking={isChecking}
           />
+        </div>
+      )}
+
+      {/* Upcoming calendar meetings - only before a recording starts */}
+      {!isRecording && transcripts.length === 0 && (
+        <div className="flex justify-center px-4 pt-4">
+          <UpcomingMeetings />
         </div>
       )}
 

@@ -7,6 +7,7 @@ import Analytics from '@/lib/analytics';
 import { toast } from 'sonner';
 import { useRecordingState } from '@/contexts/RecordingStateContext';
 import { useConfig } from '@/contexts/ConfigContext';
+import { CalendarSettings } from '@/components/Calendar/CalendarSettings';
 
 export interface RecordingPreferences {
   save_folder: string;
@@ -266,6 +267,8 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
           </div>
         </div>
       </div>
+
+      <CalendarSettings />
     </div>
   );
 }

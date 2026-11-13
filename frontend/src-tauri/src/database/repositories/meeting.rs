@@ -92,6 +92,7 @@ impl MeetingsRepository {
                     audio_start_time: t.audio_start_time,
                     audio_end_time: t.audio_end_time,
                     duration: t.duration,
+                    speaker: t.speaker,
                 })
                 .collect::<Vec<_>>();
 
@@ -194,6 +195,20 @@ impl MeetingsRepository {
         }
         transaction.commit().await?;
         Ok(true)
+    }
+
+    /// Store the matched Google Calendar event JSON on a meeting.
+    pub async fn set_calendar_event(
+        pool: &SqlitePool,
+        meeting_id: &str,
+        event_json: &str,
+    ) -> Result<bool, SqlxError> {
+        let result = sqlx::query("UPDATE meetings SET calendar_event_json = ? WHERE id = ?")
+            .bind(event_json)
+            .bind(meeting_id)
+            .execute(pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn update_meeting_name(
