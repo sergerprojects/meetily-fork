@@ -3,7 +3,9 @@ import { PermissionWarning } from '@/components/PermissionWarning';
 import { UpcomingMeetings } from '@/components/Calendar/UpcomingMeetings';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
-import { Copy, GlobeIcon, Users, Calendar as CalendarIcon } from 'lucide-react';
+import { Copy, GlobeIcon } from 'lucide-react';
+import { MeetingHeader } from '@/components/Live/MeetingHeader';
+import { LiveChat } from '@/components/Live/LiveChat';
 import { useTranscripts } from '@/contexts/TranscriptContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useRecordingState } from '@/contexts/RecordingStateContext';
@@ -178,32 +180,8 @@ export function TranscriptPanel({
       {showLiveView && (
         <div className="flex justify-center px-4 pt-2">
           <div className="w-2/3 max-w-[750px]">
-            <input
-              value={displayTitle}
-              onChange={e => setMeetingTitle(e.target.value)}
-              className="w-full bg-transparent font-serif text-[28px] leading-tight text-gray-900 outline-none placeholder:text-gray-300 focus-visible:ring-0"
-              placeholder="Untitled meeting"
-              aria-label="Meeting title"
-            />
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-2.5 py-1">
-                <CalendarIcon className="h-3.5 w-3.5" />
-                Today
-              </span>
-              {others.length > 0 && (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-2.5 py-1"
-                  title={others.map(a => a.name).join('\n')}
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  {others.length + 1}
-                </span>
-              )}
-              {others.length > 0 && others.length <= 3 && (
-                <span className="text-gray-500">{others.map(a => a.name).join(', ')}</span>
-              )}
-            </div>
-            <div className="mt-5 inline-flex rounded-lg bg-gray-100 p-0.5 text-sm" role="tablist">
+            <MeetingHeader title={displayTitle} onTitleChange={setMeetingTitle} event={event} />
+            <div className="mt-4 inline-flex rounded-lg bg-gray-100 p-0.5 text-sm" role="tablist">
               {(['notes', 'transcript'] as const).map(t => (
                 <button
                   key={t}
@@ -255,6 +233,24 @@ export function TranscriptPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {isRecording && (
+        <LiveChat
+          getTranscript={() =>
+            segments
+              .map(seg => {
+                const t = Math.max(0, Math.floor(seg.timestamp));
+                const mm = String(Math.floor(t / 60)).padStart(2, '0');
+                const ss = String(t % 60).padStart(2, '0');
+                return `[${mm}:${ss}] ${seg.speaker ? seg.speaker + ': ' : ''}${seg.text}`;
+              })
+              .join('\n')
+          }
+          notes={notes}
+          title={displayTitle}
+          attendees={others.map(a => a.name)}
+        />
       )}
     </div>
   );

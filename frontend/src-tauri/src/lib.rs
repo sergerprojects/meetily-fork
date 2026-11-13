@@ -36,6 +36,7 @@ pub(crate) use perf_trace;
 
 // Declare audio module
 pub mod analytics;
+pub mod chat;
 pub mod api;
 pub mod audio;
 pub mod calendar;
@@ -871,6 +872,8 @@ pub fn run() {
             calendar::calendar_set_ical_url,
             calendar::calendar_upcoming,
             calendar::calendar_agenda,
+            chat::meeting_chat,
+            chat::open_external,
             calendar::calendar_current_event,
             calendar::calendar_current_other_name,
             calendar::calendar_home_meetings,
