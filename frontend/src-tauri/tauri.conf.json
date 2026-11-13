@@ -42,7 +42,8 @@
                     "identifier": "main",
                     "description": "Main window capability with file system and media access",
                     "windows": [
-                        "main"
+                        "main",
+                        "indicator"
                     ],
                     "permissions": [
                         "fs:default",
@@ -62,6 +63,7 @@
                         "core:menu:default",
                         "core:tray:default",
                         "core:window:allow-set-title",
+                        "core:window:allow-start-dragging",
                         "store:default",
                         "notification:default",
                         "notification:allow-is-permission-granted",

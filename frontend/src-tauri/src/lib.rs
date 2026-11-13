@@ -50,6 +50,7 @@ pub mod onboarding;
 pub mod openai;
 pub mod anthropic;
 pub mod groq;
+pub mod indicator;
 pub mod openrouter;
 pub mod parakeet_engine;
 pub mod state;
@@ -575,6 +576,7 @@ pub fn run() {
             calendar::autorecord::start(_app.handle().clone());
             calendar::silence::start(_app.handle().clone());
             capture::snapshots::start(_app.handle().clone());
+            indicator::start(_app.handle().clone());
 
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
@@ -892,6 +894,11 @@ pub fn run() {
             calendar::autorecord::get_ignored_apps,
             calendar::silence::get_silence_stop_minutes,
             calendar::silence::set_silence_stop_minutes,
+            indicator::indicator_state,
+            indicator::indicator_open,
+            indicator::indicator_stop,
+            indicator::get_live_indicator,
+            indicator::set_live_indicator,
             capture::capture_status,
             capture::capture_request_accessibility,
             capture::capture_request_screen,

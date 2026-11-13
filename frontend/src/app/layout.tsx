@@ -9,6 +9,7 @@ import AnalyticsProvider from '@/components/AnalyticsProvider'
 import { Toaster, toast } from 'sonner'
 import "sonner/dist/styles.css"
 import { useState, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -60,6 +61,26 @@ function ConditionalImportDialog({
 // export { metadata } from './metadata'
 
 export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const pathname = usePathname()
+  // The small floating "recording" window is its own page: no sidebar, no providers.
+  if (pathname?.startsWith('/indicator')) {
+    return (
+      <html lang="en">
+        <head>
+          <link rel="stylesheet" href="/fonts/brand-fonts.css" />
+        </head>
+        <body className="font-sans antialiased bg-transparent">{children}</body>
+      </html>
+    )
+  }
+  return <AppShell>{children}</AppShell>
+}
+
+function AppShell({
   children,
 }: {
   children: React.ReactNode
