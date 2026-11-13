@@ -899,7 +899,9 @@ pub fn run() {
             capture::files::list_meeting_images,
             capture::files::read_meeting_image,
             capture::files::delete_meeting_image,
+            capture::files::export_meeting_image,
             capture::files::read_meeting_notes,
+            capture::capture_ax_probe,
             calendar::autorecord::set_ignored_apps,
             calendar::autorecord::set_calendar_record_mode,
         ])

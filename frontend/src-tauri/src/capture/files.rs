@@ -83,6 +83,31 @@ pub async fn read_meeting_image(folder: String, name: String) -> Result<Vec<u8>,
     std::fs::read(dir.join("screens").join(name)).map_err(|e| e.to_string())
 }
 
+/// Copy one image into the user's Downloads folder; returns the new path.
+#[tauri::command]
+pub async fn export_meeting_image(folder: String, name: String) -> Result<String, String> {
+    let dir = checked_folder(&folder)?;
+    let name = safe_name(&name)?;
+    let src = dir.join("screens").join(name);
+    let downloads = dirs::download_dir().ok_or("no Downloads folder")?;
+    let stem = dir.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "meeting".into());
+    let dest = unique_path(&downloads, &format!("{stem}-{name}"));
+    std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// `dir/file`, or `dir/file (2)` etc. when it already exists.
+fn unique_path(dir: &Path, file: &str) -> PathBuf {
+    let first = dir.join(file);
+    if !first.exists() {
+        return first;
+    }
+    let p = Path::new(file);
+    let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = p.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
+    (2..).map(|n| dir.join(format!("{stem} ({n}){ext}"))).find(|c| !c.exists()).unwrap()
+}
+
 /// Remove one image and its text.
 #[tauri::command]
 pub async fn delete_meeting_image(folder: String, name: String) -> Result<(), String> {
@@ -118,6 +143,16 @@ mod tests {
         assert!(checked_folder_in(&root, root.to_str().unwrap()).is_err(), "root itself is not a meeting");
         let sneaky = format!("{}/../other", inside.display());
         assert!(checked_folder_in(&root, &sneaky).is_err());
+    }
+
+    #[test]
+    fn unique_path_avoids_overwrite() {
+        let td = tempfile::tempdir().unwrap();
+        assert_eq!(unique_path(td.path(), "a.png"), td.path().join("a.png"));
+        std::fs::write(td.path().join("a.png"), b"x").unwrap();
+        assert_eq!(unique_path(td.path(), "a.png"), td.path().join("a (2).png"));
+        std::fs::write(td.path().join("a (2).png"), b"x").unwrap();
+        assert_eq!(unique_path(td.path(), "a.png"), td.path().join("a (3).png"));
     }
 
     #[test]

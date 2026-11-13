@@ -27,6 +27,14 @@ echo "==> 3/4 app bundle"
 # STRIP=none and no-OpenSSL are required on current macOS (proc-macro dylib
 # link error; brew openssl breaks llama.cpp httplib). The updater-signing
 # "no private key" error at the very end is expected: the .app is already built.
+# Stable signing identity keeps macOS privacy grants (Accessibility, Screen
+# Recording) across rebuilds. Create it once with scripts/make-signing-cert.sh;
+# without it the build is ad-hoc signed and macOS asks again after each install.
+if security find-identity -p codesigning 2>/dev/null | grep -q "Graphite Local"; then
+  export APPLE_SIGNING_IDENTITY="Graphite Local"
+  echo "Signing with the local 'Graphite Local' identity"
+fi
+
 (cd frontend && CARGO_PROFILE_RELEASE_STRIP=none CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON \
   npx pnpm@10 run tauri:build -- --bundles app) || echo "(build command exited non-zero; checking for the bundle)"
 

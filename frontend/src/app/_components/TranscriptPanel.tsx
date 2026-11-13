@@ -6,6 +6,8 @@ import { ButtonGroup } from '@/components/ui/button-group';
 import { ChevronUp, Copy, GlobeIcon, Minus } from 'lucide-react';
 import { MeetingHeader } from '@/components/Live/MeetingHeader';
 import { LiveChat } from '@/components/Live/LiveChat';
+import { ImageStrip } from '@/components/Images/ImageStrip';
+import { invoke } from '@tauri-apps/api/core';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { useTranscripts } from '@/contexts/TranscriptContext';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -73,6 +75,25 @@ export function TranscriptPanel({
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const { isCollapsed: sidebarCollapsed } = useSidebar();
   const [wasRecording, setWasRecording] = useState(false);
+  // Folder of the recording in progress (snapshots are saved there).
+  const [liveFolder, setLiveFolder] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isRecording) {
+      setLiveFolder(null);
+      return;
+    }
+    let active = true;
+    const find = async () => {
+      const f = await invoke<string | null>('get_meeting_folder_path').catch(() => null);
+      if (active && f) setLiveFolder(f);
+    };
+    find();
+    const t = setInterval(() => !liveFolder && find(), 3000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [isRecording, liveFolder]);
 
   useEffect(() => {
     if (isRecording && !wasRecording) {
@@ -228,6 +249,7 @@ export function TranscriptPanel({
                 aria-label="Meeting notes"
                 autoFocus
               />
+              <ImageStrip folder={liveFolder} live />
             </div>
           </div>
         </>

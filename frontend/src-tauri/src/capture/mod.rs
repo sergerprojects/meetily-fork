@@ -77,3 +77,37 @@ pub async fn set_capture_names(app: AppHandle<Wry>, enabled: bool) -> Result<(),
 pub async fn set_capture_snapshots(app: AppHandle<Wry>, enabled: bool) -> Result<(), String> {
     set_store_bool(&app, SNAPSHOTS_KEY, enabled)
 }
+
+pub mod ax;
+
+/// Save the accessibility tree of a running call app to a text file so we can
+/// see how it marks participants, the active speaker and shared screens.
+/// `app` is "zoom", "teams" or "chrome" (Google Meet).
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn capture_ax_probe(app: String) -> Result<String, String> {
+    if !perms::accessibility_granted() {
+        return Err("Accessibility is not allowed yet (Settings, Capture).".into());
+    }
+    let which = ax::CallApp::parse(&app).ok_or("app must be zoom, teams or chrome")?;
+    let path = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        let pid = ax::find_pid(which).ok_or_else(|| format!("{app} is not running"))?;
+        let tree = ax::snapshot_app(pid, which == ax::CallApp::Chrome, &ax::Limits::probe())
+            .ok_or("could not read the app's windows")?;
+        let dir = dirs::data_dir().ok_or("no data dir")?.join("com.meetily.ai").join("ax-probes");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let file = dir.join(format!("{}-{}.txt", app, chrono::Local::now().format("%Y%m%d-%H%M%S")));
+        let body = format!("{} nodes\n\n{}", tree.count(), tree.dump());
+        std::fs::write(&file, body).map_err(|e| e.to_string())?;
+        Ok(file.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    Ok(path)
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub async fn capture_ax_probe(_app: String) -> Result<String, String> {
+    Err("only on macOS".into())
+}

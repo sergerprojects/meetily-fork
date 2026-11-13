@@ -34,3 +34,11 @@ export const readMeetingNotes = (folder: string) => invoke<string>('read_meeting
 /** Opens the macOS privacy pane for a permission. */
 export const openPrivacyPane = (pane: 'Privacy_Accessibility' | 'Privacy_ScreenCapture') =>
   invoke<void>('open_system_settings', { preferencePane: pane });
+
+/** Saves the accessibility tree of a running call app; returns the file path. */
+export const probeCallApp = (app: 'zoom' | 'teams' | 'chrome') =>
+  invoke<string>('capture_ax_probe', { app });
+
+/** Copy one snapshot into Downloads; resolves to the new file's path. */
+export const exportMeetingImage = (folder: string, name: string) =>
+  invoke<string>('export_meeting_image', { folder, name });

@@ -1,5 +1,7 @@
 "use client";
 
+import { ImageStrip } from '@/components/Images/ImageStrip';
+import { MyNotes } from '@/components/MeetingDetails/MyNotes';
 import { MeetingSummary, Summary, Transcript } from '@/types';
 import { BlockNoteSummaryView, BlockNoteSummaryViewRef } from '@/components/AISummary/BlockNoteSummaryView';
 import { EmptyStateSummary } from '@/components/EmptyStateSummary';
@@ -27,6 +29,7 @@ interface SummaryPanelProps {
     id: string;
     title: string;
     created_at: string;
+    folder_path?: string;
   };
   meetingTitle: string;
   isSummaryDirty: boolean;
@@ -296,6 +299,7 @@ export function SummaryPanel({
       ) : (
         <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
           <div className="p-6 w-full">
+            <MyNotes folder={meeting.folder_path} />
             <BlockNoteSummaryView
               ref={summaryRef}
               summaryData={aiSummary}
@@ -314,6 +318,7 @@ export function SummaryPanel({
                 created_at: meeting.created_at
               }}
             />
+            <ImageStrip folder={meeting.folder_path} />
           </div>
           {summaryStatus !== 'idle' && (
             <div className={`mt-4 p-4 rounded-lg ${summaryStatus === 'error' ? 'bg-red-100 text-red-700' :

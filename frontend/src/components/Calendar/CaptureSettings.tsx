@@ -11,6 +11,7 @@ import {
   requestAccessibility,
   requestScreenRecording,
   setCaptureNames,
+  probeCallApp,
   setCaptureSnapshots,
 } from '@/lib/capture';
 
@@ -87,6 +88,15 @@ export function CaptureSettings() {
     }
   };
 
+  const probe = async (app: 'zoom' | 'teams' | 'chrome') => {
+    try {
+      const path = await probeCallApp(app);
+      toast.success(`Saved: `);
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="p-4 border rounded-lg space-y-3">
@@ -120,6 +130,18 @@ export function CaptureSettings() {
             <PermissionRow granted={status.accessibility} label="Accessibility" onSetUp={setUpAccessibility} />
           </div>
         )}
+      </div>
+
+      <div className="p-4 border rounded-lg space-y-2">
+        <div className="font-medium">Call-app diagnostics</div>
+        <div className="text-sm text-gray-600">
+          While you are in a call, save what Graphite can read from the call app. Used to tune name and screen-share detection. Contains participant names, so keep it private.
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => probe('zoom')}>Zoom</Button>
+          <Button size="sm" variant="outline" onClick={() => probe('teams')}>Teams</Button>
+          <Button size="sm" variant="outline" onClick={() => probe('chrome')}>Google Meet (Chrome)</Button>
+        </div>
       </div>
     </div>
   );
