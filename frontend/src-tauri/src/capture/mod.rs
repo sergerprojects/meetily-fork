@@ -123,6 +123,14 @@ pub async fn capture_ax_probe(_app: String) -> Result<String, String> {
 #[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn capture_window_test(app: String) -> Result<String, String> {
+    // Apple objects are not Send, so the whole capture lives on one blocking thread.
+    tauri::async_runtime::spawn_blocking(move || tauri::async_runtime::block_on(run_capture_test(app)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(target_os = "macos")]
+async fn run_capture_test(app: String) -> Result<String, String> {
     if !perms::screen_granted() {
         return Err("Screen Recording is not allowed yet (Settings, Capture).".into());
     }
