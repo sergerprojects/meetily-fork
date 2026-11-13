@@ -12,6 +12,7 @@ pub mod autorecord;
 pub mod google;
 pub mod ical;
 pub mod mic_activity;
+pub mod people;
 pub mod poller;
 
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
@@ -39,6 +40,13 @@ impl Source {
         match self {
             Source::Google(c) => c.list_events(min, max).await,
             Source::Ical(c) => c.list_events(min, max).await,
+        }
+    }
+
+    async fn directory_name(&self, email: &str) -> anyhow::Result<Option<String>> {
+        match self {
+            Source::Google(c) => c.directory_name(email).await,
+            Source::Ical(_) => Ok(None),
         }
     }
 
@@ -176,6 +184,37 @@ async fn client() -> Option<Arc<Source>> {
     STATE.client.read().await.clone()
 }
 
+/// Look up real names for attendees that only have an email handle (max 15 per call).
+/// Quietly gives up for the session on an email when the directory can't answer.
+pub(crate) async fn resolve_attendee_names(events: &[CalendarEvent]) {
+    people::reload();
+    let pending = people::unresolved(
+        events
+            .iter()
+            .flat_map(|e| e.attendees.iter())
+            .filter(|a| !a.is_self)
+            .map(|a| (a.name.as_str(), a.email.as_str())),
+    );
+    if pending.is_empty() {
+        return;
+    }
+    let Some(source) = client().await else { return };
+    for email in pending.into_iter().take(15) {
+        people::mark_tried(&email);
+        match source.directory_name(&email).await {
+            Ok(Some(name)) => {
+                log::info!("Calendar: resolved a real name from the directory");
+                people::remember(&email, &name);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                log::info!("Calendar: directory lookup unavailable ({})", e);
+                break; // scope/API problem: don't hammer it
+            }
+        }
+    }
+}
+
 /// Fetch and normalize events overlapping the window.
 pub(crate) async fn fetch_events(
     time_min: DateTime<Utc>,
@@ -294,6 +333,7 @@ pub fn parse_event(raw: &Value) -> Option<CalendarEvent> {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from)
+                .or_else(|| people::lookup(&email))
                 .unwrap_or_else(|| email.split('@').next().unwrap_or(&email).to_string());
             Some(CalendarAttendee {
                 name,
@@ -662,7 +702,7 @@ pub async fn calendar_home_meetings(
             let (when, attendees) = match event {
                 Some(e) => (
                     e.start.clone(),
-                    e.attendees.iter().filter(|a| !a.is_self).map(|a| a.name.clone()).collect(),
+                    e.attendees.iter().filter(|a| !a.is_self).map(|a| people::lookup(&a.email).unwrap_or_else(|| a.name.clone())).collect(),
                 ),
                 None => (created.to_rfc3339(), Vec::new()),
             };

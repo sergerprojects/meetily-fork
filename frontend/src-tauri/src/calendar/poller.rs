@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tokio_util::sync::CancellationToken;
 
-use super::{client, end_of_tomorrow, fetch_events, init_client, load_ical_url, should_prompt, CalendarEvent, STATE};
+use super::{client, end_of_tomorrow, fetch_events, resolve_attendee_names, init_client, load_ical_url, should_prompt, CalendarEvent, STATE};
 use crate::notifications::commands::NotificationManagerState;
 use crate::notifications::types::{Notification, NotificationType};
 
@@ -82,6 +82,7 @@ async fn poll_once(
         }
     };
 
+    resolve_attendee_names(&events).await; // fills people.json; applies from the next poll
     *STATE.upcoming.write().await = events.clone();
     crate::tray::set_calendar_events(app, true, &events);
 

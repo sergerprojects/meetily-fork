@@ -156,6 +156,43 @@ impl GoogleCalendarClient {
         Ok(body.access_token)
     }
 
+    /// Display name for an email from the Google Workspace directory.
+    /// Ok(None) = not found; Err = missing scope / API disabled / network.
+    pub async fn directory_name(&self, email: &str) -> Result<Option<String>> {
+        let token = self.access_token().await?;
+        let resp = self
+            .http
+            .get("https://people.googleapis.com/v1/people:searchDirectoryPeople")
+            .bearer_auth(&token)
+            .header("x-goog-user-project", &self.creds.quota_project_id)
+            .query(&[
+                ("query", email),
+                ("readMask", "names,emailAddresses"),
+                ("sources", "DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE"),
+                ("pageSize", "5"),
+            ])
+            .send()
+            .await
+            .map_err(|e| anyhow!("directory request failed: {}", e.without_url()))?;
+        let status = resp.status();
+        if !status.is_success() {
+            bail!("directory lookup failed: HTTP {}", status.as_u16());
+        }
+        let body: Value = resp.json().await.map_err(|_| anyhow!("directory response was not valid JSON"))?;
+        let wanted = email.trim().to_lowercase();
+        Ok(body
+            .get("people")
+            .and_then(|p| p.as_array())
+            .into_iter()
+            .flatten()
+            .find(|p| {
+                p.get("emailAddresses")
+                    .and_then(|e| e.as_array())
+                    .map_or(false, |a| a.iter().any(|x| x.get("value").and_then(|v| v.as_str()).map(|v| v.to_lowercase()) == Some(wanted.clone())))
+            })
+            .and_then(|p| p.pointer("/names/0/displayName").and_then(|v| v.as_str()).map(String::from)))
+    }
+
     /// List raw event JSON objects on the primary calendar overlapping
     /// `[time_min, time_max)`. Read-only GET.
     pub async fn list_events(

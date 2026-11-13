@@ -44,6 +44,8 @@ gcloud auth application-default set-quota-project <their-project-id>
 gcloud services enable calendar-json.googleapis.com --project <their-project-id>   # if not already on
 ```
 
+To show attendees by real name instead of an email handle, add `https://www.googleapis.com/auth/directory.readonly` to `--scopes` and run `gcloud services enable people.googleapis.com --project <their-project-id>`. Meetily then looks up each unknown attendee once in the Google Workspace directory and caches the answer in `~/.meetily/people.json` (`{"email": "Full Name"}`, hand-editable, never sent anywhere). If a login with more scopes is already in use by other tools, keep all of its existing scopes: a new `gcloud auth application-default login` replaces the old scope set.
+
 That writes `application_default_credentials.json` (macOS/Linux `~/.config/gcloud/`, Windows `%APPDATA%\gcloud\`, or `$CLOUDSDK_CONFIG`). Restart Meetily; Settings → Recording should say "Connected via Google sign-in (gcloud)". Read-only calendar scope only.
 
 Things that can go wrong: no personal project or no permission to enable the Calendar API; the company blocks the calendar scope for gcloud's client; `gcloud` not installed. If so, try a different source below.
