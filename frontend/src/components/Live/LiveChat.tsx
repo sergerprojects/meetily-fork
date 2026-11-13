@@ -3,14 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, X } from 'lucide-react';
 import { askMeeting, ChatModel, ChatTurn } from '@/lib/chat';
-
-const QUICK_ASKS: { label: string; question: string }[] = [
-  { label: 'What did I miss', question: 'What did I miss? Summarize the last few minutes in 3 bullets.' },
-  { label: 'Make me sound smart', question: 'Give me one sharp, well-grounded comment I could make right now, based on what has been said. One or two sentences.' },
-  { label: 'Suggest questions', question: 'Suggest 3 good questions I could ask next, based on what has been said.' },
-  { label: "Who's who", question: "Match each 'Speaker N' to an invitee using only what has been said (names used, who is addressed, roles). For each speaker give the name and the evidence in a few words, or 'unsure'. Do not guess." },
-  { label: 'Action items so far', question: 'List the action items and commitments mentioned so far, with who owns each.' },
-];
+import { SavedPrompt, loadPrompts } from '@/lib/prompts';
 
 const MODELS: { value: ChatModel; label: string }[] = [
   { value: 'haiku', label: 'Fast' },
@@ -35,6 +28,14 @@ export function LiveChat({ getTranscript, notes, title, attendees }: Props) {
   const [model, setModel] = useState<ChatModel>('sonnet');
   const [open, setOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
+
+  useEffect(() => {
+    const load = () => setPrompts(loadPrompts());
+    load();
+    window.addEventListener('graphite-prompts-changed', load);
+    return () => window.removeEventListener('graphite-prompts-changed', load);
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -88,9 +89,9 @@ export function LiveChat({ getTranscript, notes, title, attendees }: Props) {
 
         <div className="rounded-2xl border border-gray-200 bg-white/95 p-2 shadow-lg backdrop-blur">
           <div className="mb-1.5 flex flex-wrap gap-1.5">
-            {QUICK_ASKS.map(q => (
+            {prompts.map(q => (
               <button
-                key={q.label}
+                key={q.id}
                 onClick={() => ask(q.question)}
                 disabled={busy}
                 className="rounded-full border border-gray-200 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
