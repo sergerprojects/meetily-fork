@@ -44,7 +44,7 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
         )}
         <DialogContent>
           <VisuallyHidden>
-            <DialogTitle>About Meetily</DialogTitle>
+            <DialogTitle>About Graphite</DialogTitle>
           </VisuallyHidden>
           <About />
         </DialogContent>

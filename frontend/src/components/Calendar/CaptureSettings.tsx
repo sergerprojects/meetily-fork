@@ -5,16 +5,16 @@ import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import {
+  probeCallApp,
+  testWindowCapture,
   CaptureStatus,
   getCaptureStatus,
   openPrivacyPane,
   requestAccessibility,
   requestScreenRecording,
   setCaptureNames,
-  probeCallApp,
   setCaptureSnapshots,
   setCaptureOwnShares,
-  testWindowCapture,
 } from '@/lib/capture';
 
 function PermissionRow({
@@ -99,23 +99,6 @@ export function CaptureSettings() {
     }
   };
 
-  const testCapture = async () => {
-    try {
-      toast.success(await testWindowCapture('chrome'), { duration: 15000 });
-    } catch (e) {
-      toast.error(String(e));
-    }
-  };
-
-  const probe = async (app: 'zoom' | 'teams' | 'chrome') => {
-    try {
-      const path = await probeCallApp(app);
-      toast.success(`Saved: `);
-    } catch (e) {
-      toast.error(String(e));
-    }
-  };
-
   return (
     <div className="space-y-3">
       <h3 className="pt-2 text-lg font-semibold text-gray-900">Capture</h3>
@@ -155,7 +138,31 @@ export function CaptureSettings() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
+/** Developer tools: save what Graphite can read from a call app, to tune detection. */
+export function CaptureDiagnostics() {
+  const testCapture = async () => {
+    try {
+      toast.success(await testWindowCapture('chrome'), { duration: 15000 });
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
+  const probe = async (app: 'zoom' | 'teams' | 'chrome') => {
+    try {
+      const path = await probeCallApp(app);
+      toast.success(`Saved: `);
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
+  return (
+    <div className="space-y-3">
       <div className="p-4 border rounded-lg space-y-2">
         <div className="font-medium">Call-app diagnostics</div>
         <div className="text-sm text-gray-600">

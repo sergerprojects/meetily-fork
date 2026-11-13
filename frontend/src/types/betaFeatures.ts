@@ -64,7 +64,8 @@ export function loadBetaFeatures(): BetaFeatures {
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<BetaFeatures>;
       // Merge with defaults to handle missing keys (graceful degradation)
-      return { ...DEFAULT_BETA_FEATURES, ...parsed };
+      // Import and retranscribe is no longer a switch: it is always on.
+      return { ...DEFAULT_BETA_FEATURES, ...parsed, importAndRetranscribe: true };
     }
   } catch (error) {
     console.error('[BetaFeatures] Failed to load from localStorage:', error);

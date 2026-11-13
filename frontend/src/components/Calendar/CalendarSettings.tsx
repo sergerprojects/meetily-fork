@@ -6,7 +6,6 @@ import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { CaptureSettings } from '@/components/Calendar/CaptureSettings';
 import {
   Select,
   SelectContent,
@@ -37,8 +36,8 @@ const MODE_LABELS: Record<CalendarRecordMode, string> = {
   auto: 'Record automatically',
 };
 
-/** Settings > Recording: calendar status, auto-record mode, next 3 events. */
-export function CalendarSettings() {
+/** One slice of the calendar and auto-record settings: launch at login, calendar connection, or auto-record rules. */
+export function CalendarSettings({ section }: { section: 'login' | 'calendar' | 'record' }) {
   const [status, setStatus] = useState<CalendarStatus | null>(null);
   const [mode, setMode] = useState<CalendarRecordMode>('prompt');
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -162,19 +161,14 @@ export function CalendarSettings() {
   };
 
   return (
-    <div className="border-t pt-6 space-y-4">
-      <div>
-        <h4 className="text-base font-medium text-gray-900 mb-1">Calendar &amp; auto-record</h4>
-        <p className="text-sm text-gray-600">
-          When you join a call (microphone in use) during a calendar meeting with a video link, Meetily can ask to record or start recording automatically. Calls without a matching meeting only ever get a prompt.
-        </p>
-      </div>
-
+    <div className="space-y-4">
+      {section === 'login' && (
+        <>
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div className="flex-1 pr-4">
           <div className="font-medium">Launch at login</div>
           <div className="text-sm text-gray-600">
-            Starts Meetily in the menu bar when you log in, so meeting prompts and auto-record work.
+            Starts Graphite in the menu bar when you log in, so meeting prompts and auto-record work.
           </div>
         </div>
         <Switch
@@ -184,6 +178,11 @@ export function CalendarSettings() {
         />
       </div>
 
+        </>
+      )}
+
+      {section === 'calendar' && (
+        <>
       <div className="p-4 border rounded-lg bg-gray-50 space-y-3">
         <div className="font-medium">Google Calendar</div>
         <div className="text-sm text-gray-600 break-words">
@@ -240,11 +239,16 @@ export function CalendarSettings() {
         )}
       </div>
 
+        </>
+      )}
+
+      {section === 'record' && (
+        <>
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div className="flex-1 pr-4">
           <div className="font-medium">When I join a meeting</div>
           <div className="text-sm text-gray-600">
-            Automatic recordings stop when the call ends or 10 minutes after the meeting&apos;s end time.
+            Automatic recordings stop when the call ends or a few minutes after the meeting&apos;s end time.
           </div>
         </div>
         <Select value={mode} onValueChange={handleModeChange}>
@@ -260,6 +264,7 @@ export function CalendarSettings() {
           </SelectContent>
         </Select>
       </div>
+
 
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div className="flex-1 pr-4">
@@ -282,7 +287,6 @@ export function CalendarSettings() {
         </Select>
       </div>
 
-      <CaptureSettings />
 
       <div className="p-4 border rounded-lg space-y-2">
         <div className="font-medium">Never treat these apps as a meeting</div>
@@ -302,25 +306,7 @@ export function CalendarSettings() {
         </div>
       </div>
 
-      {status?.enabled && (
-        <div className="p-4 border rounded-lg">
-          <div className="font-medium mb-2">Next meetings</div>
-          {events.length === 0 ? (
-            <div className="text-sm text-gray-600">No upcoming meetings in the next 12 hours.</div>
-          ) : (
-            <ul className="space-y-1">
-              {events.map(event => (
-                <li key={event.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate text-gray-900">
-                    {event.video_url ? '● ' : ''}
-                    {event.summary}
-                  </span>
-                  <span className="shrink-0 text-gray-500">{formatEventTime(event)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        </>
       )}
     </div>
   );

@@ -365,7 +365,7 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
             }
             Err(e) => {
                 warn!("Failed to load recording preferences, using defaults: {}", e);
-                (true, None, None)
+                (false, None, None) // audio is never kept unless switched on
             }
         };
 
@@ -570,8 +570,8 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
             prefs.auto_save
         }
         Err(e) => {
-            warn!("Failed to load recording preferences, defaulting to auto_save=true: {}", e);
-            true // Default to saving if preferences can't be loaded
+            warn!("Failed to load recording preferences, defaulting to auto_save=false: {}", e);
+            false // audio is never kept unless switched on
         }
     };
 

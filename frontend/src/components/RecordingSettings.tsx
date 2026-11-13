@@ -164,19 +164,19 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Recording Settings</h3>
-        <p className="text-sm text-gray-600 mb-6">
-          Configure how your audio recordings are saved during meetings.
-        </p>
-      </div>
+      <section className="space-y-3">
+        <h3 className="text-lg font-semibold text-gray-900">When to record</h3>
+        <CalendarSettings section="record" />
+      </section>
 
+      <section className="space-y-3 border-t pt-6">
+        <h3 className="text-lg font-semibold text-gray-900">Audio files</h3>
       {/* Auto Save Toggle */}
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div className="flex-1">
-          <div className="font-medium">Save Audio Recordings</div>
+          <div className="font-medium">Keep audio files</div>
           <div className="text-sm text-gray-600">
-            Off by default. When on, an audio file is kept with each recording; when off, only the transcript is saved and the audio is discarded as you go.
+            Off by default. When on, an audio file is kept with each recording. When off, only the transcript is saved and the audio is thrown away as you go.
           </div>
         </div>
         <Switch
@@ -190,7 +190,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       {preferences.auto_save && (
         <div className="space-y-4">
           <div className="p-4 border rounded-lg bg-gray-50">
-            <div className="font-medium mb-2">Save Location</div>
+            <div className="font-medium mb-2">Where they are saved</div>
             <div className="text-sm text-gray-600 mb-3 break-all">
               {preferences.save_folder || 'Default folder'}
             </div>
@@ -199,7 +199,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
               className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
-              Open Folder
+              Open folder
             </button>
           </div>
 
@@ -218,31 +218,19 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       {!preferences.auto_save && (
         <div className="p-4 border rounded-lg bg-yellow-50">
           <div className="text-sm text-yellow-800">
-            Audio recording is disabled. Enable "Save Audio Recordings" to automatically save your meeting audio.
+            No audio is kept. Only the transcript is saved.
           </div>
         </div>
       )}
 
-      {/* Recording Notification Toggle */}
-      <div className="flex items-center justify-between p-4 border rounded-lg">
-        <div className="flex-1">
-          <div className="font-medium">Recording Start Notification</div>
-          <div className="text-sm text-gray-600">
-            Show reminder to inform participants when recording starts
-          </div>
-        </div>
-        <Switch
-          checked={showRecordingNotification}
-          onCheckedChange={handleNotificationToggle}
-        />
-      </div>
+      </section>
 
       {/* Device Preferences */}
       <div className="space-y-4">
         <div className="border-t pt-6">
-          <h4 className="text-base font-medium text-gray-900 mb-4">Default Audio Devices</h4>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Microphone and call audio</h3>
           <p className="text-sm text-gray-600 mb-4">
-            Set your preferred microphone and system audio devices for recording. These will be automatically selected when starting new recordings.
+            Which microphone and which output to listen to. Leave both on the default unless a call is not being picked up.
           </p>
 
           {isRecording && (
@@ -268,7 +256,6 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
         </div>
       </div>
 
-      <CalendarSettings />
     </div>
   );
 }
