@@ -19,9 +19,7 @@ import {
   CalendarStatus,
   formatEventTime,
   getCalendarRecordMode,
-  getAppleCalendarStatus,
   getCalendarStatus,
-  useAppleCalendar,
   getIgnoredApps,
   getSilenceStopMinutes,
   setSilenceStopMinutes,
@@ -46,14 +44,11 @@ export function CalendarSettings() {
   const [linkInput, setLinkInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [ignoredText, setIgnoredText] = useState('');
-  const [appleStatus, setAppleStatus] = useState('unavailable');
-  const [appleBusy, setAppleBusy] = useState(false);
   const [silenceMinutes, setSilenceMinutes] = useState('10');
 
   useEffect(() => {
     isEnabled().then(setLaunchAtLogin).catch(() => setLaunchAtLogin(null));
     getIgnoredApps().then(apps => setIgnoredText(apps.join(', ')));
-    getAppleCalendarStatus().then(setAppleStatus);
     getSilenceStopMinutes().then(m => setSilenceMinutes(String(m)));
   }, []);
 
@@ -90,21 +85,6 @@ export function CalendarSettings() {
     const [s, upcoming] = await Promise.all([getCalendarStatus(), getUpcomingCalendarEvents()]);
     setStatus(s);
     setEvents(upcoming.slice(0, 3));
-  };
-
-  const handleUseApple = async () => {
-    setAppleBusy(true);
-    try {
-      await useAppleCalendar();
-      toast.success('Using your Mac Calendar app');
-      setAppleStatus('granted');
-      await refreshEvents();
-    } catch (error) {
-      toast.error('Could not use the Calendar app', { description: String(error) });
-      setAppleStatus(await getAppleCalendarStatus());
-    } finally {
-      setAppleBusy(false);
-    }
   };
 
   const handleConnect = async () => {
@@ -193,22 +173,9 @@ export function CalendarSettings() {
           {status === null
             ? 'Checking…'
             : status.enabled
-              ? `Connected via ${status.source === 'ical' ? 'private iCal link' : status.source === 'apple' ? 'the Mac Calendar app' : 'Google sign-in (gcloud)'}${status.reason ? ` (last sync error: ${status.reason})` : ''}`
+              ? `Connected via ${status.source === 'ical' ? 'private iCal link' : 'Google sign-in (gcloud)'}${status.reason ? ` (last sync error: ${status.reason})` : ''}`
               : `Not connected${status.reason ? ` — ${status.reason}` : ''}`}
         </div>
-        {appleStatus !== 'unavailable' && status?.source !== 'apple' && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
-            <div className="text-sm text-gray-700">
-              <div className="font-medium">Use the Calendar app on this Mac</div>
-              <div className="text-xs text-gray-500">
-                Works with any account in your Calendar app (Google, Exchange, iCloud). No Google sign-in or cloud project needed.
-              </div>
-            </div>
-            <Button size="sm" onClick={handleUseApple} disabled={appleBusy}>
-              {appleBusy ? 'Waiting…' : appleStatus === 'denied' ? 'Try again' : 'Use it'}
-            </Button>
-          </div>
-        )}
         {status?.source === 'ical' ? (
           <Button variant="outline" size="sm" onClick={handleDisconnect}>
             Remove link

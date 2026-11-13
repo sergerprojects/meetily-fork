@@ -25,7 +25,7 @@ export interface CalendarStatus {
   enabled: boolean;
   reason: string | null;
   /** 'ical' (private link) or 'google' (gcloud credentials) when enabled. */
-  source?: 'ical' | 'google' | 'apple' | null;
+  source?: 'ical' | 'google' | null;
 }
 
 export const CALENDAR_MEETING_STARTING_EVENT = 'calendar-meeting-starting';
@@ -209,18 +209,4 @@ export async function getCurrentEvent(): Promise<CalendarEvent | null> {
 /** Write notes next to the live recording (notes.md). */
 export async function saveLiveNotes(text: string): Promise<void> {
   await invoke('save_live_notes', { text });
-}
-
-/** "granted" | "undetermined" | "denied" | "unavailable" (helper not in this build). */
-export async function getAppleCalendarStatus(): Promise<string> {
-  try {
-    return await invoke<string>('calendar_apple_status');
-  } catch {
-    return 'unavailable';
-  }
-}
-
-/** Show the macOS Calendar prompt (once) and switch to the Calendar app. Rejects with a readable message. */
-export async function useAppleCalendar(): Promise<CalendarStatus> {
-  return invoke<CalendarStatus>('calendar_use_apple');
 }
