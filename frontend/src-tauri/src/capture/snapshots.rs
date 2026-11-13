@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Wry};
 
-const IDLE: Duration = Duration::from_secs(3);
+const IDLE: Duration = Duration::from_secs(2);
 const ACTIVE: Duration = Duration::from_secs(1);
 
 /// The two rectangles describe the same window (screen points, a little slack).
@@ -97,8 +97,24 @@ async fn tick(app: &AppHandle<Wry>, dir: &Path, keeper: &mut Keeper) -> Result<b
     let target = sc_windows.iter().find(|s| same_window(s.frame, wf)).ok_or("window not found")?;
     let scale = (2560.0 / wf[2].max(1.0)).min(2.0);
     let pic = screen::capture_window(target.id, (wf[2] * scale) as usize, (wf[3] * scale) as usize).await?;
-    let (x, y, w, h) = stage_in_pixels(wf, share.stage, pic.w, pic.h);
-    let Some(shared) = pic.crop(x, y, w, h) else { return Ok(true) };
+    // Meet's page is dark with the shared content as one big light block (plus its own
+    // buttons around it). Take the whole page and keep that block, so a few points of
+    // error in the page's reported positions cannot cut the content off. If the page has
+    // no clear block (a dark share), fall back to the reported stage rectangle.
+    let (px, py, pw, ph) = stage_in_pixels(wf, share.page, pic.w, pic.h);
+    let page_pic = pic.crop(px, py, pw, ph);
+    let from_page = page_pic.as_ref().and_then(|p| {
+        let (x, y, w, h) = p.dense_bounds(40.0, 0.4)?;
+        p.crop(x, y, w, h)
+    });
+    let shared = match from_page {
+        Some(f) => f,
+        None => {
+            let (x, y, w, h) = stage_in_pixels(wf, share.stage, pic.w, pic.h);
+            let Some(f) = pic.crop(x, y, w, h) else { return Ok(true) };
+            f
+        }
+    };
     if shared.is_blank() {
         return Ok(true);
     }

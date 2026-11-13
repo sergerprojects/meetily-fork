@@ -19,7 +19,7 @@ pub struct KeepRules {
 
 impl Default for KeepRules {
     fn default() -> Self {
-        Self { same_within: 6, settle_secs: 1.5, min_gap_secs: 3.0, max_images: 60 }
+        Self { same_within: 6, settle_secs: 1.0, min_gap_secs: 3.0, max_images: 60 }
     }
 }
 
@@ -97,8 +97,8 @@ mod tests {
     fn keeps_a_picture_only_after_it_settles() {
         let mut k = Keeper::new(KeepRules::default());
         assert!(!k.offer(A, 0.0), "first sighting is only a candidate");
-        assert!(!k.offer(A, 1.0), "not settled yet");
-        assert!(k.offer(A, 1.6));
+        assert!(!k.offer(A, 0.5), "not settled yet");
+        assert!(k.offer(A, 1.1));
         assert!(!k.offer(A, 2.0), "same picture again");
         assert_eq!(k.kept(), 1);
     }

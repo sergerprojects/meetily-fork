@@ -88,6 +88,34 @@ impl Frame {
         max - min < 12.0
     }
 
+    /// Bounding box (x, y, w, h) of the dense, non-dark content, ignoring a dark
+    /// background and sparse interface bits (text, buttons) around it. Rows and columns
+    /// count only when at least `frac` of their pixels are lighter than `dark`.
+    /// None when there is no such block or it is under 5% of the picture.
+    pub fn dense_bounds(&self, dark: f32, frac: f32) -> Option<(usize, usize, usize, usize)> {
+        const S: usize = 2; // sample every 2nd pixel
+        let gw = self.w / S;
+        let gh = self.h / S;
+        if gw < 4 || gh < 4 {
+            return None;
+        }
+        let bright: Vec<bool> = (0..gh).flat_map(|gy| (0..gw).map(move |gx| (gx, gy))).map(|(gx, gy)| self.luma(gx * S, gy * S) > dark).collect();
+        let at = |gx: usize, gy: usize| bright[gy * gw + gx];
+        let span = |lo: usize, hi: usize, lines: usize, count: &dyn Fn(usize) -> usize, across: usize| -> Option<(usize, usize)> {
+            let _ = (lo, hi);
+            let ok: Vec<usize> = (0..lines).filter(|i| count(*i) as f32 / across.max(1) as f32 >= frac).collect();
+            Some((*ok.first()?, *ok.last()?))
+        };
+        // Pass 1: rows over the full width, then columns over those rows, then rows again over those columns.
+        let (mut y0, mut y1) = span(0, gw, gh, &|gy| (0..gw).filter(|gx| at(*gx, gy)).count(), gw)?;
+        let (x0, x1) = span(y0, y1, gw, &|gx| (y0..=y1).filter(|gy| at(gx, *gy)).count(), y1 - y0 + 1)?;
+        let (ny0, ny1) = span(x0, x1, gh, &|gy| (x0..=x1).filter(|gx| at(*gx, gy)).count(), x1 - x0 + 1)?;
+        y0 = ny0;
+        y1 = ny1;
+        let (x, y, w, h) = (x0 * S, y0 * S, (x1 - x0 + 1) * S, (y1 - y0 + 1) * S);
+        (w * h * 20 >= self.w * self.h).then_some((x, y, w, h))
+    }
+
     pub fn to_png(&self) -> Result<Vec<u8>, String> {
         let mut rgba = Vec::with_capacity(self.bgra.len());
         for px in self.bgra.chunks_exact(4) {
@@ -175,6 +203,52 @@ mod tests {
         assert!(solid(64, 64, 0, 0, 0).is_blank());
         assert!(solid(64, 64, 200, 200, 200).is_blank());
         assert!(!split(64, 64, true).is_blank());
+    }
+
+    /// Black picture with a white block and a little bright "interface" noise outside it.
+    fn page_with_block() -> Frame {
+        let (w, h) = (200usize, 120usize);
+        let mut v = vec![0u8; w * h * 4];
+        let mut set = |x: usize, y: usize, c: u8| {
+            let i = (y * w + x) * 4;
+            v[i] = c;
+            v[i + 1] = c;
+            v[i + 2] = c;
+            v[i + 3] = 255;
+        };
+        for y in 20..90 {
+            for x in 40..170 {
+                set(x, y, 235);
+            }
+        }
+        for x in 60..140 {
+            set(x, 5, 255); // thin bright line (like a title bar)
+        }
+        for y in 100..112 {
+            for x in 80..110 {
+                set(x, y, 255); // small button
+            }
+        }
+        Frame::new(w, h, v).unwrap()
+    }
+
+    #[test]
+    fn dense_bounds_finds_the_content_and_ignores_sparse_interface() {
+        let (x, y, w, h) = page_with_block().dense_bounds(40.0, 0.4).unwrap();
+        assert!((38..=42).contains(&x) && (18..=22).contains(&y), "origin {x},{y}");
+        assert!((126..=134).contains(&w) && (66..=74).contains(&h), "size {w}x{h}");
+    }
+
+    #[test]
+    fn dense_bounds_of_a_dark_picture_is_none() {
+        assert!(solid(64, 64, 0, 0, 0).dense_bounds(40.0, 0.4).is_none());
+    }
+
+    #[test]
+    fn dense_bounds_of_a_bright_picture_is_all_of_it() {
+        let (x, y, w, h) = solid(64, 48, 240, 240, 240).dense_bounds(40.0, 0.4).unwrap();
+        assert_eq!((x, y), (0, 0));
+        assert!(w >= 62 && h >= 46);
     }
 
     #[test]

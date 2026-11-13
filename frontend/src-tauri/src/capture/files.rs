@@ -58,7 +58,8 @@ pub fn list_images(dir: &Path) -> Vec<MeetingImage> {
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            if !name.to_lowercase().ends_with(".png") {
+            // Hidden names are temporary files (".ocr.png") that may vanish at any moment.
+            if name.starts_with('.') || !name.to_lowercase().ends_with(".png") {
                 return None;
             }
             let at = index.iter().find(|i| i.name == name).and_then(|i| i.at);
@@ -170,10 +171,11 @@ mod tests {
         std::fs::create_dir_all(&s).unwrap();
         std::fs::write(s.join("002.png"), b"x").unwrap();
         std::fs::write(s.join("001.png"), b"x").unwrap();
+        std::fs::write(s.join(".ocr.png"), b"x").unwrap();
         std::fs::write(s.join("001.txt"), "Q3 plan").unwrap();
         std::fs::write(s.join("index.json"), r#"[{"name":"001.png","at":12.5}]"#).unwrap();
         let v = list_images(td.path());
-        assert_eq!(v.len(), 2);
+        assert_eq!(v.len(), 2, "temporary .ocr.png is not listed");
         assert_eq!(v[0].name, "001.png");
         assert_eq!(v[0].at, Some(12.5));
         assert_eq!(v[0].text.as_deref(), Some("Q3 plan"));

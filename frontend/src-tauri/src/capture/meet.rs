@@ -12,6 +12,8 @@ pub struct Share {
     pub own: bool,
     /// Where the shared content is, x y w h in screen points.
     pub stage: [f64; 4],
+    /// The whole Meet page (without the browser's own tabs and toolbar).
+    pub page: [f64; 4],
 }
 
 fn area(f: &[f64; 4]) -> f64 {
@@ -67,7 +69,7 @@ pub fn detect(window: &Node) -> Option<Share> {
             best.or(m.frame)
         })
         .or(page.frame)?;
-    Some(Share { presenter, own, stage })
+    Some(Share { presenter, own, stage, page: page.frame.unwrap_or(stage) })
 }
 
 /// Words in Meet's own interface that are never a person's name.
