@@ -70,6 +70,87 @@ pub fn detect(window: &Node) -> Option<Share> {
     Some(Share { presenter, own, stage })
 }
 
+/// Words in Meet's own interface that are never a person's name.
+const NOT_NAMES: &[&str] = &[
+    "you", "presentation audio", "pinned", "mute", "muted", "turn off microphone", "people", "chat", "more options",
+    "meeting details", "leave call", "send a reaction", "host controls", "call controls",
+];
+
+fn is_marker(text: &str) -> bool {
+    let t = text.to_lowercase();
+    t.contains("is speaking") || t.contains("speaking now") || t.contains("currently speaking") || t == "speaking"
+}
+
+fn name_like(text: &str) -> Option<String> {
+    let t = text.trim();
+    // Your own tile ("Alex Morgan (You)"): your lines come from the microphone.
+    if t.to_lowercase().ends_with("(you)") {
+        return None;
+    }
+    let n = t.chars().count();
+    if !(2..=40).contains(&n) || !t.chars().any(|c| c.is_alphabetic()) || is_marker(t) {
+        return None;
+    }
+    if NOT_NAMES.contains(&t.to_lowercase().as_str()) || t.contains(':') {
+        return None;
+    }
+    Some(t.to_string())
+}
+
+fn texts(n: &Node, out: &mut Vec<String>) {
+    n.walk(&mut |x| {
+        if x.role == "AXStaticText" || x.role == "AXHeading" {
+            for v in [&x.value, &x.title] {
+                if let Some(nm) = name_like(v) {
+                    if !out.contains(&nm) {
+                        out.push(nm);
+                    }
+                }
+            }
+        }
+    });
+}
+
+fn node_has_marker(n: &Node) -> bool {
+    [&n.title, &n.desc, &n.value, &n.help].iter().any(|t| is_marker(t))
+}
+
+/// (marker seen below, names resolved below)
+fn speaking_walk(n: &Node) -> (bool, Vec<String>) {
+    let mut marker = node_has_marker(n);
+    let mut found: Vec<String> = Vec::new();
+    for c in &n.children {
+        let (m, f) = speaking_walk(c);
+        marker |= m;
+        for name in f {
+            if !found.contains(&name) {
+                found.push(name);
+            }
+        }
+    }
+    if !found.is_empty() || !marker {
+        return (marker, found);
+    }
+    // A marker is somewhere below and no tile claimed it: if this node holds exactly
+    // one name, that is the speaker; otherwise keep climbing.
+    let mut names = Vec::new();
+    texts(n, &mut names);
+    if names.len() == 1 {
+        (true, names)
+    } else {
+        (true, Vec::new())
+    }
+}
+
+/// Names the page marks as speaking right now. Empty when nothing is marked (Meet's
+/// markup for this is read from the dump of a real multi-person call; unverified).
+pub fn speaking(window: &Node) -> Vec<String> {
+    match meet_page(window) {
+        Some(page) => speaking_walk(page).1,
+        None => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,5 +226,43 @@ mod tests {
         assert_eq!(parse_presenter("Alex Kim (presenting)"), Some(("Alex Kim".into(), false)));
         assert_eq!(parse_presenter("Alex Morgan (You, presenting)"), Some(("Alex Morgan".into(), true)));
         assert_eq!(parse_presenter("Meeting details"), None);
+    }
+
+    #[test]
+    fn marked_tile_gives_its_single_name() {
+        let tile = |name: &str, speaking: bool| {
+            let mut kids = vec![n("AXStaticText", "", "", None, vec![])];
+            kids[0].value = name.into();
+            if speaking {
+                let mut m = n("AXGroup", "", "", None, vec![]);
+                m.desc = "Priya Shah is speaking".into();
+                kids.push(m);
+            }
+            n("AXGroup", "", "", None, kids)
+        };
+        let page = n(
+            "AXWebArea",
+            "",
+            "Meet - abc",
+            None,
+            vec![tile("Alex Morgan", false), tile("Sam Lee", false), tile("Priya Shah", true)],
+        );
+        let w = n("AXWindow", "", "", None, vec![page]);
+        // The marker text itself names no one; the tile's own label does.
+        assert_eq!(speaking(&w), vec!["Priya Shah".to_string()]);
+    }
+
+    #[test]
+    fn nothing_marked_means_nobody() {
+        let page = n("AXWebArea", "", "Meet - abc", None, vec![]);
+        assert!(speaking(&n("AXWindow", "", "", None, vec![page])).is_empty());
+    }
+
+    #[test]
+    fn interface_words_are_not_names() {
+        assert_eq!(name_like("Presentation audio"), None);
+        assert_eq!(name_like("4:54"), None);
+        assert_eq!(name_like("Alex Morgan (You)"), None, "own tile is never a remote speaker");
+        assert_eq!(name_like("Priya Shah").as_deref(), Some("Priya Shah"));
     }
 }

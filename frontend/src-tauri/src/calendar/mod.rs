@@ -681,6 +681,14 @@ pub async fn attach_to_saved_meeting(
     folder_path: Option<&str>,
 ) -> Option<String> {
     apply_speaker_names(pool, meeting_id, folder_path.map(Path::new)).await;
+    if let Some(f) = folder_path.map(Path::new) {
+        // Names the call app showed while people spoke (runs before manual choices are lost: it
+        // only touches lines still labelled Others / Speaker N).
+        let n = crate::capture::names::apply(pool, meeting_id, f).await;
+        if n > 0 {
+            log::info!("Speaker names: {} line(s) named from the call app", n);
+        }
+    }
     let forced = STATE.attach_running.lock().await.take();
     let pending = STATE.pending.lock().await.take();
     if forced.is_none() && pending.is_none() && client().await.is_none() {

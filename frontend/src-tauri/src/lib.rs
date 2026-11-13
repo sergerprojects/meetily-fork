@@ -576,6 +576,7 @@ pub fn run() {
             calendar::autorecord::start(_app.handle().clone());
             calendar::silence::start(_app.handle().clone());
             capture::snapshots::start(_app.handle().clone());
+            capture::names::start(_app.handle().clone());
             indicator::start(_app.handle().clone());
 
             // Set models directory to use app_data_dir (unified storage location)

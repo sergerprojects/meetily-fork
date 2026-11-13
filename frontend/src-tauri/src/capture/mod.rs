@@ -8,8 +8,10 @@ pub mod files;
 pub mod frame;
 pub mod keeper;
 pub mod meet;
+pub mod names;
 pub mod screen;
 pub mod snapshots;
+pub mod speakers;
 pub mod store;
 pub mod perms;
 
