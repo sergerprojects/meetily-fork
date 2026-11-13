@@ -902,6 +902,7 @@ pub fn run() {
             capture::files::export_meeting_image,
             capture::files::read_meeting_notes,
             capture::capture_ax_probe,
+            capture::capture_window_test,
             capture::edit::delete_transcript_segment,
             capture::edit::relabel_speaker,
             calendar::autorecord::set_ignored_apps,

@@ -13,6 +13,7 @@ import {
   setCaptureNames,
   probeCallApp,
   setCaptureSnapshots,
+  testWindowCapture,
 } from '@/lib/capture';
 
 function PermissionRow({
@@ -88,6 +89,14 @@ export function CaptureSettings() {
     }
   };
 
+  const testCapture = async () => {
+    try {
+      toast.success(await testWindowCapture('chrome'), { duration: 15000 });
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
   const probe = async (app: 'zoom' | 'teams' | 'chrome') => {
     try {
       const path = await probeCallApp(app);
@@ -141,6 +150,7 @@ export function CaptureSettings() {
           <Button size="sm" variant="outline" onClick={() => probe('zoom')}>Zoom</Button>
           <Button size="sm" variant="outline" onClick={() => probe('teams')}>Teams</Button>
           <Button size="sm" variant="outline" onClick={() => probe('chrome')}>Google Meet (Chrome)</Button>
+          <Button size="sm" variant="outline" onClick={testCapture}>Test picture + text (Chrome)</Button>
         </div>
       </div>
     </div>

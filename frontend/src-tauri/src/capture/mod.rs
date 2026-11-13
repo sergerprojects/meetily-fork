@@ -5,6 +5,10 @@
 pub mod clock;
 pub mod edit;
 pub mod files;
+pub mod frame;
+pub mod keeper;
+pub mod screen;
+pub mod store;
 pub mod perms;
 
 use serde::Serialize;
@@ -110,5 +114,47 @@ pub async fn capture_ax_probe(app: String) -> Result<String, String> {
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
 pub async fn capture_ax_probe(_app: String) -> Result<String, String> {
+    Err("only on macOS".into())
+}
+
+/// Self-test for snapshots: capture the biggest on-screen window of a call app,
+/// read its text, and save both next to the accessibility dumps.
+/// Returns the picture's path and the first lines of text found.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn capture_window_test(app: String) -> Result<String, String> {
+    if !perms::screen_granted() {
+        return Err("Screen Recording is not allowed yet (Settings, Capture).".into());
+    }
+    let which = ax::CallApp::parse(&app).ok_or("app must be zoom, teams or chrome")?;
+    let pid = ax::find_pid(which).ok_or_else(|| format!("{app} is not running"))?;
+    let windows = screen::windows_of_pid(pid).await?;
+    let win = windows
+        .into_iter()
+        .filter(|w| w.on_screen && w.frame[2] > 200.0 && w.frame[3] > 150.0)
+        .max_by(|a, b| (a.frame[2] * a.frame[3]).total_cmp(&(b.frame[2] * b.frame[3])))
+        .ok_or("no visible window to capture")?;
+    let scale = 2.0;
+    let frame = screen::capture_window(win.id, (win.frame[2] * scale) as usize, (win.frame[3] * scale) as usize).await?;
+    let dir = dirs::data_dir().ok_or("no data dir")?.join("com.meetily.ai").join("ax-probes");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = dir.join(format!("{}-capture-{}.png", app, chrono::Local::now().format("%Y%m%d-%H%M%S")));
+    std::fs::write(&file, frame.to_png()?).map_err(|e| e.to_string())?;
+    let text = screen::ocr_png(&file).unwrap_or_default();
+    let head: String = text.lines().take(6).collect::<Vec<_>>().join(" | ");
+    Ok(format!(
+        "{} ({}x{}, window \"{}\", blank: {}) text: {}",
+        file.display(),
+        frame.w,
+        frame.h,
+        win.title,
+        frame.is_blank(),
+        if head.is_empty() { "(none found)".into() } else { head }
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub async fn capture_window_test(_app: String) -> Result<String, String> {
     Err("only on macOS".into())
 }

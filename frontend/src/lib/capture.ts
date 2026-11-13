@@ -49,3 +49,7 @@ export const deleteTranscriptSegment = (meetingId: string, segmentId: string) =>
 /** Rename a speaker for the whole saved meeting. */
 export const relabelSpeaker = (meetingId: string, from: string, to: string) =>
   invoke<number>('relabel_speaker', { meetingId, from, to });
+
+/** Captures a call app's window and reads its text; resolves to a one-line report. */
+export const testWindowCapture = (app: 'zoom' | 'teams' | 'chrome') =>
+  invoke<string>('capture_window_test', { app });
