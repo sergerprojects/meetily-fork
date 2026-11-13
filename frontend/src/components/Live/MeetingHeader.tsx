@@ -60,7 +60,7 @@ export function MeetingHeader({ title, onTitleChange, event }: Props) {
       <input
         value={title}
         onChange={e => onTitleChange(e.target.value)}
-        className="w-full bg-transparent font-serif text-[28px] leading-tight text-gray-900 outline-none placeholder:text-gray-300"
+        className="w-full bg-transparent font-display font-semibold tracking-[-0.005em] text-[28px] leading-tight text-gray-900 outline-none placeholder:text-gray-300"
         placeholder="Untitled meeting"
         aria-label="Meeting title"
       />

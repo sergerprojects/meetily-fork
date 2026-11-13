@@ -3,9 +3,10 @@
 //! only the calendar tools allowed) for your meetings and reads the JSON it returns.
 //! No Google Cloud project, no OAuth client, no key in this app.
 //!
+//! The model makes one `list_events` call and Meetily lifts the connector's RAW result
+//! from Claude Code's stream output, so the model never rewrites your calendar.
 //! Needs the Google Calendar connector authorized once (run `/mcp` in Claude Code).
-//! Each refresh takes ~15-30 s and a small model call, so results are cached for
-//! several minutes; the poller keeps asking, the cache answers.
+//! Each refresh takes ~15-30 s, so results are cached for several minutes.
 
 use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
@@ -15,13 +16,6 @@ use tokio::sync::Mutex;
 
 const CACHE_TTL: Duration = Duration::from_secs(8 * 60);
 const FETCH_TIMEOUT: Duration = Duration::from_secs(150);
-/// Calendar tools Claude may call (read-only).
-const TOOLS: &[&str] = &[
-    "mcp__google-calendar__list_events",
-    "mcp__google-calendar__get_event",
-    "mcp__google-calendar__search_events",
-    "mcp__google-calendar__list_calendars",
-];
 
 struct Cache {
     fetched: Instant,
@@ -57,84 +51,40 @@ impl ClaudeCalendar {
 }
 
 async fn fetch(from: DateTime<Utc>, to: DateTime<Utc>) -> Result<Vec<Value>> {
-    let prompt = build_prompt(from, to);
-    let text = crate::chat::run_claude(&prompt, "haiku", TOOLS, FETCH_TIMEOUT)
-        .await
-        .map_err(|e| anyhow!(e))?;
-    parse_events(&text)
-}
-
-pub fn build_prompt(from: DateTime<Utc>, to: DateTime<Utc>) -> String {
-    format!(
-        "Read my primary Google Calendar with the google-calendar tools (list every page; expand recurring events into single instances) \
-for events between {} and {}. Skip all-day and cancelled events. \
-Output ONLY a JSON array, no prose and no code fences. Each item: \
-{{\"id\": string, \"summary\": string, \"start\": RFC3339, \"end\": RFC3339, \"location\": string|null, \"description\": string|null, \
-\"hangoutLink\": string|null, \"htmlLink\": string|null, \"organizer\": string|null (email), \
-\"attendees\": [{{\"email\": string, \"displayName\": string|null, \"responseStatus\": string|null, \"self\": bool}}]}}. \
-If a tool says it needs authorization, output exactly: AUTH_NEEDED",
-        from.to_rfc3339(),
-        to.to_rfc3339()
-    )
-}
-
-/// Turn Claude's reply into Google-API-shaped event JSON (what `parse_event` expects).
-pub fn parse_events(text: &str) -> Result<Vec<Value>> {
-    if text.contains("AUTH_NEEDED") || text.to_lowercase().contains("needs") && text.contains("/mcp") {
-        bail!("The Google Calendar connector needs authorizing: run /mcp in Claude Code and sign in to google-calendar, then try again");
-    }
-    let (a, b) = (text.find('['), text.rfind(']'));
-    let (Some(a), Some(b)) = (a, b) else {
-        bail!("Claude did not return a calendar list");
-    };
-    let items: Vec<Value> = serde_json::from_str(&text[a..=b]).map_err(|_| anyhow!("Claude's calendar list was not valid JSON"))?;
-    Ok(items.into_iter().filter_map(to_google_shape).collect())
-}
-
-fn to_google_shape(i: Value) -> Option<Value> {
-    let start = i.get("start")?.as_str()?;
-    let end = i.get("end")?.as_str()?;
-    DateTime::parse_from_rfc3339(start).ok()?;
-    DateTime::parse_from_rfc3339(end).ok()?;
-    let id = i
-        .get("id")
-        .and_then(|v| v.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| format!("{}_{}", i.get("summary").and_then(|v| v.as_str()).unwrap_or("event"), start));
-    let mut v = json!({
-        "id": id,
-        "status": "confirmed",
-        "start": {"dateTime": start},
-        "end": {"dateTime": end},
-    });
-    for (src, dst) in [("summary", "summary"), ("location", "location"), ("description", "description"), ("hangoutLink", "hangoutLink"), ("htmlLink", "htmlLink")] {
-        if let Some(s) = i.get(src).and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
-            v[dst] = json!(s);
+    let tool = "mcp__google-calendar__list_events";
+    let mut all: Vec<Value> = Vec::new();
+    let mut token: Option<String> = None;
+    for _ in 0..6 {
+        let mut args = json!({
+            "startTime": from.to_rfc3339(),
+            "endTime": to.to_rfc3339(),
+            "orderBy": "startTime",
+            "pageSize": 250,
+        });
+        if let Some(t) = &token {
+            args["pageToken"] = json!(t);
+        }
+        let raw = crate::chat::call_mcp_tool(tool, &args, FETCH_TIMEOUT).await.map_err(|e| anyhow!(e))?;
+        let (events, next) = events_from_result(&raw)?;
+        all.extend(events);
+        token = next;
+        if token.is_none() {
+            break;
         }
     }
-    if let Some(o) = i.get("organizer").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
-        v["organizer"] = json!({"email": o});
-    }
-    if let Some(list) = i.get("attendees").and_then(|x| x.as_array()) {
-        let attendees: Vec<Value> = list
-            .iter()
-            .filter_map(|a| {
-                let email = a.get("email")?.as_str()?;
-                let mut o = json!({"email": email, "self": a.get("self").and_then(|x| x.as_bool()).unwrap_or(false)});
-                if let Some(n) = a.get("displayName").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
-                    o["displayName"] = json!(n);
-                }
-                if let Some(r) = a.get("responseStatus").and_then(|x| x.as_str()) {
-                    o["responseStatus"] = json!(r);
-                }
-                Some(o)
-            })
-            .collect();
-        if !attendees.is_empty() {
-            v["attendees"] = json!(attendees);
-        }
-    }
-    Some(v)
+    Ok(all)
+}
+
+/// The connector's raw `list_events` result: `{"events":[...Google Calendar v3 events...], "nextPageToken": ...}`.
+pub fn events_from_result(raw: &str) -> Result<(Vec<Value>, Option<String>)> {
+    let v: Value = serde_json::from_str(raw.trim()).map_err(|_| anyhow!("The calendar connector returned something unreadable"))?;
+    let events = v
+        .get("events")
+        .and_then(|e| e.as_array())
+        .ok_or_else(|| anyhow!("The calendar connector returned no event list"))?
+        .clone();
+    let next = v.get("nextPageToken").and_then(|t| t.as_str()).filter(|t| !t.is_empty()).map(String::from);
+    Ok((events, next))
 }
 
 fn overlapping(events: &[Value], min: DateTime<Utc>, max: DateTime<Utc>) -> Vec<Value> {
@@ -153,46 +103,36 @@ fn overlapping(events: &[Value], min: DateTime<Utc>, max: DateTime<Utc>) -> Vec<
 mod tests {
     use super::*;
 
-    const REPLY: &str = r#"Here you go:
-```json
-[{"id":"a1","summary":"Susie / Chris","start":"2026-11-13T12:00:00-05:00","end":"2026-11-13T12:30:00-05:00",
-  "hangoutLink":"https://meet.google.com/abc-defg-hij","organizer":"you@example.com",
-  "attendees":[{"email":"sam@example.com","displayName":"Sam Rivera","responseStatus":"accepted","self":false},
-               {"email":"you@example.com","self":true}]},
- {"summary":"bad","start":"not a date","end":"x"}]
-```"#;
+    const RAW: &str = r#"{"events":[
+      {"id":"a1","summary":"Susie / Chris","start":{"dateTime":"2026-11-13T12:00:00-05:00"},"end":{"dateTime":"2026-11-13T12:30:00-05:00"},
+       "hangoutLink":"https://meet.google.com/abc-defg-hij","organizer":{"email":"you@example.com"},
+       "attendees":[{"email":"sam@example.com","displayName":"Sam Rivera","responseStatus":"accepted"},
+                    {"email":"you@example.com","self":true,"responseStatus":"accepted"}]},
+      {"id":"allday","summary":"Holiday","start":{"date":"2026-11-13"},"end":{"date":"2026-11-14"}}],
+      "nextPageToken":"abc"}"#;
 
     #[test]
-    fn parses_fenced_reply_into_google_shape_and_feeds_parse_event() {
-        let events = parse_events(REPLY).unwrap();
-        assert_eq!(events.len(), 1, "malformed item dropped");
-        let ev = crate::calendar::parse_event(&events[0]).unwrap();
-        assert_eq!(ev.summary, "Susie / Chris");
-        assert_eq!(ev.video_url.as_deref(), Some("https://meet.google.com/abc-defg-hij"));
-        assert_eq!(ev.attendees.len(), 2);
-        assert!(ev.attendees.iter().any(|a| a.is_self));
-        assert_eq!(crate::calendar::one_other_name(&ev).as_deref(), Some("Sam Rivera"));
+    fn raw_result_flows_through_parse_event_unchanged() {
+        let (events, next) = events_from_result(RAW).unwrap();
+        assert_eq!(next.as_deref(), Some("abc"));
+        assert_eq!(events.len(), 2);
+        let parsed: Vec<_> = events.iter().filter_map(crate::calendar::parse_event).collect();
+        assert_eq!(parsed.len(), 1, "all-day event is dropped by the shared parser");
+        assert_eq!(parsed[0].video_url.as_deref(), Some("https://meet.google.com/abc-defg-hij"));
+        assert_eq!(crate::calendar::one_other_name(&parsed[0]).as_deref(), Some("Sam Rivera"));
     }
 
     #[test]
-    fn auth_needed_and_garbage_are_errors_with_a_plain_message() {
-        assert!(parse_events("AUTH_NEEDED").unwrap_err().to_string().contains("/mcp"));
-        assert!(parse_events("I could not read it").is_err());
-        assert!(parse_events("[not json]").is_err());
+    fn unreadable_results_are_plain_errors() {
+        assert!(events_from_result("not json").is_err());
+        assert!(events_from_result("{}").is_err());
     }
 
     #[test]
     fn overlap_filter() {
-        let events = parse_events(REPLY).unwrap();
+        let (events, _) = events_from_result(RAW).unwrap();
         let t = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc);
         assert_eq!(overlapping(&events, t("2026-11-13T17:10:00Z"), t("2026-11-13T17:20:00Z")).len(), 1);
         assert!(overlapping(&events, t("2026-11-13T19:00:00Z"), t("2026-11-13T20:00:00Z")).is_empty());
-    }
-
-    #[test]
-    fn prompt_names_the_window_and_the_auth_marker() {
-        let t = DateTime::parse_from_rfc3339("2026-11-13T17:00:00Z").unwrap().with_timezone(&Utc);
-        let p = build_prompt(t, t + ChronoDuration::hours(48));
-        assert!(p.contains("2026-11-13T17:00:00+00:00") && p.contains("AUTH_NEEDED"));
     }
 }

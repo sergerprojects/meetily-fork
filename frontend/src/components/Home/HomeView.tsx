@@ -106,7 +106,7 @@ export function HomeView() {
       <div className="mx-auto max-w-[640px] px-6 pt-10">
         {calendarOn && (
           <section className="mb-10">
-            <h1 className="mb-4 font-serif text-3xl text-gray-900">Coming up</h1>
+            <h1 className="mb-4 font-display font-semibold tracking-[-0.005em] text-3xl text-gray-900">Coming up</h1>
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               {agendaByDay.length === 0 ? (
                 <div className="text-sm text-gray-500">Nothing else on your calendar through tomorrow.</div>

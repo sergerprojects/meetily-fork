@@ -1,0 +1,4 @@
+/* Optional brand fonts. Loads fonts/brand/local.css if it exists (written by
+   scripts/install-fonts.sh from font files you are licensed to use; the files and
+   that CSS are git-ignored). When absent the app uses the system font (SF Pro on Mac). */
+@import url("./brand/local.css");
