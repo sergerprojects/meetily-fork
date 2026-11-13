@@ -8,6 +8,7 @@
 //! If credentials are missing/invalid the whole feature is silently off and
 //! the app behaves exactly as before.
 
+pub mod apple;
 pub mod autorecord;
 pub mod google;
 pub mod ical;
@@ -27,6 +28,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+use apple::AppleClient;
 use google::GoogleCalendarClient;
 use ical::IcalClient;
 
@@ -34,6 +36,7 @@ use ical::IcalClient;
 pub(crate) enum Source {
     Google(Arc<GoogleCalendarClient>),
     Ical(Arc<IcalClient>),
+    Apple(Arc<AppleClient>),
 }
 
 impl Source {
@@ -41,13 +44,14 @@ impl Source {
         match self {
             Source::Google(c) => c.list_events(min, max).await,
             Source::Ical(c) => c.list_events(min, max).await,
+            Source::Apple(c) => c.list_events(min, max).await,
         }
     }
 
     async fn directory_name(&self, email: &str) -> anyhow::Result<Option<String>> {
         match self {
             Source::Google(c) => c.directory_name(email).await,
-            Source::Ical(_) => Ok(None),
+            Source::Ical(_) | Source::Apple(_) => Ok(None),
         }
     }
 
@@ -55,6 +59,7 @@ impl Source {
         match self {
             Source::Google(_) => "google",
             Source::Ical(_) => "ical",
+            Source::Apple(_) => "apple",
         }
     }
 }
@@ -155,6 +160,19 @@ pub(crate) async fn init_client(ical_url: Option<String>) -> bool {
         };
         log::info!("Calendar: using private iCal link");
         return true;
+    }
+    // The Mac's Calendar app, once the user has allowed access (no cloud project needed).
+    if let Some(apple) = AppleClient::new() {
+        if apple.status().await == "granted" {
+            *STATE.client.write().await = Some(Arc::new(Source::Apple(Arc::new(apple))));
+            *STATE.status.write().await = CalendarStatus {
+                enabled: true,
+                reason: None,
+                source: Some("apple".to_string()),
+            };
+            log::info!("Calendar: using the Mac Calendar app");
+            return true;
+        }
     }
     match google::AdcCredentials::load() {
         Ok(creds) => {
@@ -628,6 +646,32 @@ pub async fn calendar_set_ical_url(
         }
     }
     Ok(STATE.status.read().await.clone())
+}
+
+/// "Use my Mac's Calendar app": shows the macOS prompt once, then switches over.
+#[tauri::command]
+pub async fn calendar_use_apple(app: tauri::AppHandle<tauri::Wry>) -> Result<CalendarStatus, String> {
+    let apple = AppleClient::new().ok_or_else(|| "The Calendar helper is missing from this build.".to_string())?;
+    if !apple.request().await {
+        return Err("Calendar access was not allowed. Turn it on for Meetily in System Settings, Privacy & Security, Calendars.".to_string());
+    }
+    init_client(load_ical_url(&app)).await;
+    let now = Utc::now();
+    let horizon = end_of_tomorrow(&now.with_timezone(&chrono::Local));
+    if let Ok(events) = fetch_events(now - Duration::minutes(15), horizon).await {
+        *STATE.upcoming.write().await = events.clone();
+        crate::tray::set_calendar_events(&app, true, &events);
+    }
+    Ok(STATE.status.read().await.clone())
+}
+
+/// Whether this build can read the Mac's Calendar app ("granted" | "undetermined" | "denied" | "unavailable").
+#[tauri::command]
+pub async fn calendar_apple_status() -> String {
+    match AppleClient::new() {
+        Some(a) => a.status().await,
+        None => "unavailable".to_string(),
+    }
 }
 
 #[tauri::command]

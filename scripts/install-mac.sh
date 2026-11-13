@@ -20,6 +20,9 @@ echo "==> 1/4 llama-helper sidecar (required by the bundle)"
 mkdir -p frontend/src-tauri/binaries
 cp target/release/llama-helper frontend/src-tauri/binaries/llama-helper-aarch64-apple-darwin
 
+echo "==> 1b/4 Calendar-app helper"
+bash scripts/build-eventkit.sh
+
 echo "==> 2/4 frontend dependencies"
 (cd frontend && npx --yes pnpm@10 install)
 

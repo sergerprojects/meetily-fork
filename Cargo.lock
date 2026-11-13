@@ -3710,7 +3710,7 @@ dependencies = [
 
 [[package]]
 name = "meetily"
-version = "0.4.1-fork.9"
+version = "0.4.1-fork.10"
 dependencies = [
  "anyhow",
  "async-trait",
