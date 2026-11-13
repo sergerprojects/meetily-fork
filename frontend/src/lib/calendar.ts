@@ -196,3 +196,17 @@ export async function getSilenceStopMinutes(): Promise<number> {
 export async function setSilenceStopMinutes(minutes: number): Promise<void> {
   await invoke('set_silence_stop_minutes', { minutes });
 }
+
+/** Calendar event for the recording in progress (names resolved), or null. */
+export async function getCurrentEvent(): Promise<CalendarEvent | null> {
+  try {
+    return await invoke<CalendarEvent | null>('calendar_current_event');
+  } catch {
+    return null;
+  }
+}
+
+/** Write notes next to the live recording (notes.md). */
+export async function saveLiveNotes(text: string): Promise<void> {
+  await invoke('save_live_notes', { text });
+}

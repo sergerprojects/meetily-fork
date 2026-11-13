@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { ChevronDown, ChevronRight, File, Settings, ChevronLeftCircle, ChevronRightCircle, Calendar, StickyNote, Home, Trash2, Mic, Square, Plus, Search, Pencil, NotebookPen, SearchIcon, X, Upload } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from './SidebarProvider';
@@ -63,6 +64,10 @@ const Sidebar: React.FC = () => {
   const { betaFeatures } = useConfig();
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['meetings']));
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [appVersion, setAppVersion] = useState('');
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     provider: 'ollama',
@@ -553,7 +558,7 @@ const Sidebar: React.FC = () => {
 
   const renderItem = (item: SidebarItem, depth = 0) => {
     const isExpanded = expandedFolders.has(item.id);
-    const paddingLeft = `${depth * 12 + 12}px`;
+    const paddingLeft = `${depth * 8 + 8}px`;
     const isActive = item.type === 'file' && currentMeeting?.id === item.id;
     const isMeetingItem = item.id.includes('-') && !item.id.startsWith('intro-call');
 
@@ -568,7 +573,7 @@ const Sidebar: React.FC = () => {
         <div
           className={`flex items-center transition-all duration-150 group ${item.type === 'folder' && depth === 0
             ? 'p-3 text-lg font-semibold h-10 mx-3 mt-3 rounded-lg'
-            : `px-3 py-2 my-0.5 rounded-md text-sm ${isActive ? 'bg-blue-100 text-blue-700 font-medium' :
+            : `relative px-2 py-2 my-0.5 rounded-md text-sm ${isActive ? 'bg-blue-100 text-blue-700 font-medium' :
               hasTranscriptMatch ? 'bg-yellow-50' : 'hover:bg-gray-50'
             } cursor-pointer`
             }`}
@@ -604,10 +609,10 @@ const Sidebar: React.FC = () => {
               )}
             </>
           ) : (
-            <div className="flex flex-col w-full">
-              <div className="flex items-center w-full">
+            <div className="flex flex-col w-full min-w-0">
+              <div className="flex items-center w-full min-w-0">
                 {isMeetingItem ? (
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full mr-2 bg-gray-100">
+                  <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full mr-2 bg-gray-100">
                     <File className="w-3.5 h-3.5 text-gray-600" />
                   </div>
                 ) : (
@@ -615,9 +620,9 @@ const Sidebar: React.FC = () => {
                     <Plus className="w-3.5 h-3.5 text-blue-600" />
                   </div>
                 )}
-                <span className="flex-1 break-words">{item.title}</span>
+                <span className="flex-1 min-w-0 break-words line-clamp-3 leading-snug">{item.title}</span>
                 {isMeetingItem && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                  <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5 rounded-md bg-white/95 shadow-sm border border-gray-100 px-0.5">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -777,41 +782,46 @@ const Sidebar: React.FC = () => {
             <button
               onClick={handleRecordingToggle}
               disabled={isRecording}
-              className={`w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white ${isRecording ? 'bg-red-300 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'} rounded-lg transition-colors shadow-sm`}
+              className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${isRecording ? 'bg-gray-100 text-gray-500 cursor-default' : 'bg-gray-900 text-white hover:bg-gray-700 shadow-sm'}`}
             >
               {isRecording ? (
                 <>
-                  <Square className="w-4 h-4 mr-2" />
-                  <span>Recording in progress...</span>
+                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
+                  <span>Recording</span>
                 </>
               ) : (
                 <>
-                  <Mic className="w-4 h-4 mr-2" />
-                  <span>Start Recording</span>
+                  <Mic className="w-4 h-4" />
+                  <span>Start recording</span>
                 </>
               )}
             </button>
 
-            {betaFeatures.importAndRetranscribe && (
+            <div className="mt-1.5 flex items-center justify-center gap-1">
+              {betaFeatures.importAndRetranscribe && (
+                <button
+                  onClick={() => openImportDialog()}
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100"
+                  title="Import audio"
+                  aria-label="Import audio"
+                >
+                  <Upload className="w-4 h-4" />
+                  Import
+                </button>
+              )}
               <button
-                onClick={() => openImportDialog()}
-                className="w-full flex items-center justify-center px-3 py-2 mt-1 text-sm font-medium text-gray-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors shadow-sm"
+                onClick={() => router.push('/settings')}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100"
+                title="Settings"
+                aria-label="Settings"
               >
-                <Upload className="w-4 h-4 mr-2" />
-                <span>Import Audio</span>
+                <Settings className="w-4 h-4" />
+                Settings
               </button>
-            )}
-
-            <button
-              onClick={() => router.push('/settings')}
-              className="w-full flex items-center justify-center px-3 py-1.5 mt-1 mb-1 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors shadow-sm"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              <span>Settings</span>
-            </button>
+            </div>
             <Info isCollapsed={isCollapsed} />
             <div className="w-full flex items-center justify-center px-3 py-1 text-xs text-gray-400">
-              v0.4.1
+              v{appVersion}
             </div>
           </div>
         )}

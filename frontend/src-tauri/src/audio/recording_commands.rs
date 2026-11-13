@@ -1221,6 +1221,20 @@ pub async fn get_recording_state() -> serde_json::Value {
     }
 }
 
+/// Free-form notes typed during the recording, kept next to the transcript as
+/// `notes.md` so the importer can merge them in.
+#[tauri::command]
+pub async fn save_live_notes(text: String) -> Result<(), String> {
+    let folder = {
+        let guard = RECORDING_MANAGER.lock().unwrap();
+        guard.as_ref().and_then(|m| m.get_meeting_folder())
+    };
+    let Some(folder) = folder else { return Err("no recording in progress".to_string()) };
+    let tmp = folder.join(".notes.md.tmp");
+    std::fs::write(&tmp, text.as_bytes()).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, folder.join("notes.md")).map_err(|e| e.to_string())
+}
+
 /// Get the meeting folder path for the current recording
 /// Returns the path if a meeting name was set and folder structure initialized
 #[tauri::command]

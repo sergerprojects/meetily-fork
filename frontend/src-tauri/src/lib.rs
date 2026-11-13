@@ -729,6 +729,7 @@ pub fn run() {
             audio::recording_commands::is_recording_paused,
             audio::recording_commands::get_recording_state,
             audio::recording_commands::get_meeting_folder_path,
+            audio::recording_commands::save_live_notes,
             // Reload sync commands (retrieve transcript history and meeting name)
             audio::recording_commands::get_transcript_history,
             audio::recording_commands::get_recording_meeting_name,
@@ -870,6 +871,7 @@ pub fn run() {
             calendar::calendar_set_ical_url,
             calendar::calendar_upcoming,
             calendar::calendar_agenda,
+            calendar::calendar_current_event,
             calendar::calendar_current_other_name,
             calendar::calendar_home_meetings,
             calendar::calendar_event_for_window,

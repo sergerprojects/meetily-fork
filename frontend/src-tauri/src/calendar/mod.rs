@@ -713,6 +713,24 @@ pub async fn calendar_home_meetings(
         .collect())
 }
 
+/// The calendar event for the recording in progress (the one it was started for,
+/// else the best match for right now), attendee names resolved. None when unsure.
+#[tauri::command]
+pub async fn calendar_current_event() -> Option<CalendarEvent> {
+    let mut event = if let Some((e, _)) = STATE.pending.lock().await.as_ref() {
+        e.clone()
+    } else {
+        let upcoming = STATE.upcoming.read().await;
+        autorecord::matching_event(&upcoming, Utc::now())?.clone()
+    };
+    for a in event.attendees.iter_mut() {
+        if let Some(name) = people::lookup(&a.email) {
+            a.name = name;
+        }
+    }
+    Some(event)
+}
+
 /// Name to show instead of "Others" while recording a 1:1 (the recording's
 /// calendar event, else the single event happening right now). None when unsure.
 #[tauri::command]
