@@ -3,7 +3,10 @@
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
-import { Copy, FolderOpen, RefreshCw } from 'lucide-react';
+import { Copy, FolderOpen, Mic, RefreshCw } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useSidebar } from '@/components/Sidebar/SidebarProvider';
+import { getEventForMeeting, startRecordingForEvent, startRecordingWithTitle } from '@/lib/calendar';
 import Analytics from '@/lib/analytics';
 import { RetranscribeDialog } from './RetranscribeDialog';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -29,6 +32,17 @@ export function TranscriptButtonGroup({
 }: TranscriptButtonGroupProps) {
   const { betaFeatures } = useConfig();
   const [showRetranscribeDialog, setShowRetranscribeDialog] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const { currentMeeting } = useSidebar();
+
+  // Start another recording for this meeting (same calendar event when it has one).
+  const continueRecording = useCallback(async () => {
+    const event = meetingId ? await getEventForMeeting(meetingId) : null;
+    const goHome = () => router.push('/');
+    if (event) await startRecordingForEvent(event, pathname, goHome);
+    else startRecordingWithTitle(currentMeeting?.title || 'Continued recording', pathname, goHome);
+  }, [meetingId, pathname, router, currentMeeting]);
 
   const handleRetranscribeComplete = useCallback(async () => {
     // Refetch transcripts to show the updated data
@@ -53,6 +67,20 @@ export function TranscriptButtonGroup({
         >
           <Copy />
           <span className="hidden @[22rem]:inline">Copy</span>
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="px-2 @[22rem]:px-4"
+          onClick={() => {
+            Analytics.trackButtonClick('continue_recording', 'meeting_details');
+            continueRecording();
+          }}
+          title="Continue recording this meeting"
+        >
+          <Mic className="@[22rem]:mr-2" size={16} />
+          <span className="hidden @[22rem]:inline">Continue</span>
         </Button>
 
         <Button

@@ -144,6 +144,8 @@ export interface HomeMeeting {
   when: string;
   /** Other attendees' names; empty without a calendar match. */
   attendees: string[];
+  /** Calendar event this recording belongs to. Several recordings can share one. */
+  event_id?: string | null;
 }
 
 /** Events not yet ended through the end of tomorrow. */
@@ -224,4 +226,34 @@ export async function attachRecordingToEvent(event: CalendarEvent): Promise<void
 /** Remember which person each "Speaker N" is (saved with the recording). */
 export async function saveSpeakerNames(names: Record<string, string>): Promise<void> {
   await invoke('save_speaker_names', { names });
+}
+
+export interface CalendarWeek {
+  events: CalendarEvent[];
+  updated_at: string | null;
+  error: string | null;
+  enabled: boolean;
+}
+
+/** Today (past events included) through the next 7 days, oldest first. */
+export async function getCalendarWeek(): Promise<CalendarWeek> {
+  try {
+    return await invoke<CalendarWeek>('calendar_week');
+  } catch {
+    return { events: [], updated_at: null, error: 'Calendar unavailable', enabled: false };
+  }
+}
+
+/** Ask the calendar source again right now. */
+export async function refreshCalendar(): Promise<CalendarWeek> {
+  return invoke<CalendarWeek>('calendar_refresh');
+}
+
+/** The calendar event a saved meeting belongs to, if any. */
+export async function getEventForMeeting(meetingId: string): Promise<CalendarEvent | null> {
+  try {
+    return await invoke<CalendarEvent | null>('calendar_event_for_meeting', { meetingId });
+  } catch {
+    return null;
+  }
 }

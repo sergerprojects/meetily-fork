@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tokio_util::sync::CancellationToken;
 
-use super::{client, end_of_tomorrow, fetch_events, resolve_attendee_names, init_client, load_ical_url, should_prompt, CalendarEvent, STATE};
+use super::{client, load_cache, refresh_window, init_client, load_ical_url, should_prompt, CalendarEvent, STATE};
 use crate::notifications::commands::NotificationManagerState;
 use crate::notifications::types::{Notification, NotificationType};
 
@@ -29,6 +29,7 @@ pub fn start(app: AppHandle<Wry>) {
         // No early return when nothing is configured: the user can paste an
         // iCal link later and the loop picks the new source up.
         init_client(load_ical_url(&app), super::load_prefers_claude(&app)).await;
+        load_cache().await;
         let cancel = CANCEL.clone();
         let mut prompted: HashSet<String> = HashSet::new();
         let mut last_error: Option<String> = None;
@@ -61,12 +62,10 @@ async fn poll_once(
     last_error: &mut Option<String>,
 ) {
     let now = Utc::now();
-    let horizon = end_of_tomorrow(&now.with_timezone(&Local));
-    let events = match fetch_events(now - Duration::minutes(15), horizon).await {
+    let events = match refresh_window(app).await {
         Ok(events) => {
             if last_error.take().is_some() {
                 log::info!("Calendar: fetch recovered");
-                STATE.status.write().await.reason = None;
             }
             events
         }
@@ -81,10 +80,6 @@ async fn poll_once(
             return;
         }
     };
-
-    resolve_attendee_names(&events).await; // fills people.json; applies from the next poll
-    *STATE.upcoming.write().await = events.clone();
-    crate::tray::set_calendar_events(app, true, &events);
 
     // Forget prompted ids for events no longer in the window.
     prompted.retain(|id| events.iter().any(|e| &e.id == id));

@@ -33,6 +33,11 @@ impl ClaudeCalendar {
         Self { cache: Mutex::new(None) }
     }
 
+    /// Forget the cached list so the next call asks Google again.
+    pub async fn invalidate(&self) {
+        *self.cache.lock().await = None;
+    }
+
     /// Events overlapping `[min, max)`. Served from cache when it covers the window and is fresh.
     pub async fn list_events(&self, min: DateTime<Utc>, max: DateTime<Utc>) -> Result<Vec<Value>> {
         let mut guard = self.cache.lock().await;

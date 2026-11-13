@@ -55,6 +55,12 @@ impl Source {
         }
     }
 
+    async fn invalidate(&self) {
+        if let Source::Claude(c) = self {
+            c.invalidate().await;
+        }
+    }
+
     fn name(&self) -> &'static str {
         match self {
             Source::Google(_) => "google",
@@ -136,6 +142,8 @@ pub(crate) struct CalendarState {
     excluded: Mutex<HashSet<String>>,
     /// Event the user picked for the recording already in progress (no age limit).
     attach_running: Mutex<Option<CalendarEvent>>,
+    /// When the event list was last refreshed from the source (RFC3339).
+    updated_at: RwLock<Option<String>>,
 }
 
 pub(crate) static STATE: Lazy<CalendarState> = Lazy::new(|| CalendarState {
@@ -149,6 +157,7 @@ pub(crate) static STATE: Lazy<CalendarState> = Lazy::new(|| CalendarState {
     pending: Mutex::new(None),
     excluded: Mutex::new(HashSet::new()),
     attach_running: Mutex::new(None),
+    updated_at: RwLock::new(None),
 });
 
 /// Pick a source once: the pasted iCal link if there is one, otherwise gcloud
@@ -232,6 +241,110 @@ pub(crate) async fn resolve_attendee_names(events: &[CalendarEvent]) {
             }
         }
     }
+}
+
+/// How far the calendar view reaches: from the start of today through the next 7 days.
+const WEEK_EXTRA_DAYS: i64 = 6;
+
+fn cache_path() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".meetily").join("calendar-cache.json"))
+}
+
+/// Last good event list from disk (so Home is not empty while the first refresh runs).
+pub(crate) async fn load_cache() {
+    let Some(path) = cache_path() else { return };
+    let Ok(raw) = std::fs::read_to_string(&path) else { return };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return };
+    let (Some(at), Some(events)) = (v.get("updated_at").and_then(|x| x.as_str()), v.get("events")) else { return };
+    let fresh = DateTime::parse_from_rfc3339(at).map_or(false, |t| Utc::now() - t.with_timezone(&Utc) < Duration::hours(24));
+    if !fresh {
+        return;
+    }
+    if let Ok(events) = serde_json::from_value::<Vec<CalendarEvent>>(events.clone()) {
+        if STATE.upcoming.read().await.is_empty() {
+            *STATE.upcoming.write().await = events;
+            *STATE.updated_at.write().await = Some(at.to_string());
+        }
+    }
+}
+
+fn save_cache(events: &[CalendarEvent], at: &str) {
+    let Some(path) = cache_path() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let tmp = path.with_extension("json.tmp");
+    if let Ok(json) = serde_json::to_string(&serde_json::json!({"updated_at": at, "events": events})) {
+        if std::fs::write(&tmp, json).is_ok() {
+            let _ = std::fs::rename(&tmp, &path);
+        }
+    }
+}
+
+/// Fetch today + the next 7 days from the source and publish them (cache, tray, state).
+pub(crate) async fn refresh_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> anyhow::Result<Vec<CalendarEvent>> {
+    let now_local = chrono::Local::now();
+    let events = fetch_events(start_of_today(&now_local), end_of_day_plus(&now_local, WEEK_EXTRA_DAYS)).await?;
+    resolve_attendee_names(&events).await;
+    let at = Utc::now().to_rfc3339();
+    *STATE.upcoming.write().await = events.clone();
+    *STATE.updated_at.write().await = Some(at.clone());
+    STATE.status.write().await.reason = None;
+    crate::tray::set_calendar_events(app, true, &events);
+    save_cache(&events, &at);
+    Ok(events)
+}
+
+#[derive(Debug, Serialize)]
+pub struct WeekView {
+    pub events: Vec<CalendarEvent>,
+    pub updated_at: Option<String>,
+    /// Plain-language problem with the last refresh, if any.
+    pub error: Option<String>,
+    pub enabled: bool,
+}
+
+/// Everything from the start of today through the next 7 days (past events included), oldest first.
+#[tauri::command]
+pub async fn calendar_week() -> WeekView {
+    let mut events = STATE.upcoming.read().await.clone();
+    events.sort_by(|a, b| a.start.cmp(&b.start));
+    let status = STATE.status.read().await.clone();
+    WeekView {
+        events,
+        updated_at: STATE.updated_at.read().await.clone(),
+        error: status.reason.clone(),
+        enabled: status.enabled,
+    }
+}
+
+/// Refresh now (ignores the source's cache) and return the new week.
+#[tauri::command]
+pub async fn calendar_refresh(app: tauri::AppHandle<tauri::Wry>) -> WeekView {
+    if let Some(c) = client().await {
+        c.invalidate().await;
+    }
+    if let Err(e) = refresh_window(&app).await {
+        STATE.status.write().await.reason = Some(e.to_string());
+    }
+    calendar_week().await
+}
+
+/// The calendar event a saved meeting was matched to, if any.
+#[tauri::command]
+pub async fn calendar_event_for_meeting(
+    state: tauri::State<'_, crate::state::AppState>,
+    meeting_id: String,
+) -> Result<Option<CalendarEvent>, String> {
+    use sqlx::Row;
+    let row = sqlx::query("SELECT calendar_event_json FROM meetings WHERE id = ?")
+        .bind(&meeting_id)
+        .fetch_optional(state.db_manager.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(row
+        .and_then(|r| r.try_get::<Option<String>, _>("calendar_event_json").ok().flatten())
+        .and_then(|j| serde_json::from_str(&j).ok()))
 }
 
 /// Fetch and normalize events overlapping the window.
@@ -433,6 +546,26 @@ pub fn best_match(
         }
     }
     best.map(|(e, _)| e.clone())
+}
+
+/// Start of today in `now`'s timezone, as UTC.
+pub fn start_of_today<Tz: TimeZone>(now: &DateTime<Tz>) -> DateTime<Utc> {
+    now.timezone()
+        .from_local_datetime(&now.date_naive().and_time(NaiveTime::MIN))
+        .earliest()
+        .map(|d| d.with_timezone(&Utc))
+        .unwrap_or_else(|| now.with_timezone(&Utc) - Duration::hours(24))
+}
+
+/// End of the day `extra_days` after today (local), as UTC.
+pub fn end_of_day_plus<Tz: TimeZone>(now: &DateTime<Tz>, extra_days: i64) -> DateTime<Utc> {
+    let midnight = (now.date_naive() + Duration::days(extra_days + 1)).and_time(NaiveTime::MIN);
+    now.timezone()
+        .from_local_datetime(&midnight)
+        .earliest()
+        .or_else(|| now.timezone().from_local_datetime(&(midnight + Duration::hours(1))).earliest())
+        .map(|d| d.with_timezone(&Utc))
+        .unwrap_or_else(|| now.with_timezone(&Utc) + Duration::hours(24 * (extra_days + 1)))
 }
 
 /// End of tomorrow (= start of the day after tomorrow) in `now`'s timezone,
@@ -656,15 +789,8 @@ pub async fn calendar_set_source(app: tauri::AppHandle<tauri::Wry>, source: Stri
     // Refresh now; the first Claude fetch takes a while, so the UI shows the status immediately.
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let now = Utc::now();
-        let horizon = end_of_tomorrow(&now.with_timezone(&chrono::Local));
-        match fetch_events(now - Duration::minutes(15), horizon).await {
-            Ok(events) => {
-                *STATE.upcoming.write().await = events.clone();
-                crate::tray::set_calendar_events(&handle, true, &events);
-                STATE.status.write().await.reason = None;
-            }
-            Err(e) => STATE.status.write().await.reason = Some(e.to_string()),
+        if let Err(e) = refresh_window(&handle).await {
+            STATE.status.write().await.reason = Some(e.to_string());
         }
     });
     Ok(STATE.status.read().await.clone())
@@ -703,12 +829,7 @@ pub async fn calendar_set_ical_url(
             init_client(Some(url), false).await;
             log::info!("Calendar: iCal link connected ({} events in the next week)", count);
             // Show meetings right away instead of waiting for the next poll.
-            let now = Utc::now();
-            let horizon = end_of_tomorrow(&now.with_timezone(&chrono::Local));
-            if let Ok(events) = fetch_events(now - Duration::minutes(15), horizon).await {
-                *STATE.upcoming.write().await = events.clone();
-                crate::tray::set_calendar_events(&app, true, &events);
-            }
+            let _ = refresh_window(&app).await;
         }
         None => {
             store.delete(ical::STORE_KEY);
@@ -767,6 +888,8 @@ pub struct HomeMeeting {
     pub when: String,
     /// Other attendees' names (you excluded), empty when no calendar match.
     pub attendees: Vec<String>,
+    /// Calendar event this recording belongs to (several recordings can share one).
+    pub event_id: Option<String>,
 }
 
 /// Recent saved meetings with who was in them, for the Home list.
@@ -795,6 +918,7 @@ pub async fn calendar_home_meetings(
                 .ok()
                 .flatten()
                 .and_then(|j| serde_json::from_str(&j).ok());
+            let event_id = event.as_ref().map(|e| e.id.clone());
             let (when, attendees) = match event {
                 Some(e) => (
                     e.start.clone(),
@@ -802,7 +926,7 @@ pub async fn calendar_home_meetings(
                 ),
                 None => (created.to_rfc3339(), Vec::new()),
             };
-            Some(HomeMeeting { id, title, when, attendees })
+            Some(HomeMeeting { id, title, when, attendees, event_id })
         })
         .collect())
 }
@@ -985,6 +1109,17 @@ mod tests {
         let rec_start = DateTime::parse_from_rfc3339("2026-11-13T19:02:00Z").unwrap().with_timezone(&Utc);
         let rec_end = rec_start + Duration::minutes(58); // runs long: overlap with the 3 h block grows
         assert_eq!(best_match(&events, rec_start, rec_end).unwrap().id, "g");
+    }
+
+    #[test]
+    fn week_window_spans_today_through_next_week_in_local_time() {
+        use chrono::FixedOffset;
+        let est = FixedOffset::west_opt(5 * 3600).unwrap();
+        let now = est.with_ymd_and_hms(2026, 11, 13, 15, 30, 0).unwrap();
+        // Local midnight today = 05:00Z; end of day 6 days out = local midnight of Nov 20 = 05:00Z Nov 20.
+        assert_eq!(start_of_today(&now).to_rfc3339(), "2026-11-13T05:00:00+00:00");
+        assert_eq!(end_of_day_plus(&now, 6).to_rfc3339(), "2026-11-20T05:00:00+00:00");
+        assert_eq!(end_of_day_plus(&now, 1), end_of_tomorrow(&now));
     }
 
     #[test]
