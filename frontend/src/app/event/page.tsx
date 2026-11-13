@@ -52,7 +52,7 @@ function EventPage() {
 
   const others = event.attendees.filter(a => !a.is_self);
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f7f6f1] pb-32">
+    <div className="min-h-screen flex-1 overflow-y-auto bg-[#f7f6f1] pb-32">
       <div className="mx-auto max-w-[680px] px-6 pt-8">
         <button className="mb-6 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900" onClick={() => router.push('/')}>
           <ArrowLeft className="h-4 w-4" /> Home
