@@ -215,3 +215,8 @@ export async function saveLiveNotes(text: string): Promise<void> {
 export async function setCalendarSource(source: 'claude' | 'google'): Promise<CalendarStatus> {
   return invoke<CalendarStatus>('calendar_set_source', { source });
 }
+
+/** "This is the meeting": attach the recording already in progress to this calendar event. */
+export async function attachRecordingToEvent(event: CalendarEvent): Promise<void> {
+  await invoke('calendar_attach_to_running', { event });
+}

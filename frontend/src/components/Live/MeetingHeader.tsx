@@ -27,10 +27,13 @@ interface Props {
   title: string;
   onTitleChange: (v: string) => void;
   event: CalendarEvent | null;
+  /** Other meetings on the calendar right now: lets you fix a wrong guess. */
+  choices?: CalendarEvent[];
+  onPick?: (event: CalendarEvent) => void;
 }
 
 /** Title, then chips (date, people). The chips open the calendar event: details, Join, attendees. */
-export function MeetingHeader({ title, onTitleChange, event }: Props) {
+export function MeetingHeader({ title, onTitleChange, event, choices = [], onPick }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -65,7 +68,7 @@ export function MeetingHeader({ title, onTitleChange, event }: Props) {
         aria-label="Meeting title"
       />
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button className={chip} onClick={() => event && setOpen(o => !o)} aria-expanded={open}>
+        <button className={chip} onClick={() => (event || choices.length > 0) && setOpen(o => !o)} aria-expanded={open}>
           <CalendarIcon className="h-3.5 w-3.5" />
           Today
         </button>
@@ -76,6 +79,18 @@ export function MeetingHeader({ title, onTitleChange, event }: Props) {
           </button>
         )}
       </div>
+
+      {open && !event && choices.length > 0 && (
+        <div className="absolute left-0 top-full z-30 mt-2 w-[420px] rounded-2xl border border-gray-200 bg-white p-4 shadow-xl">
+          <div className="mb-2 text-xs font-medium text-gray-400">Which meeting is this?</div>
+          {choices.map(c => (
+            <button key={c.id} onClick={() => { onPick?.(c); setOpen(false); }} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-gray-900 hover:bg-gray-50">
+              {c.summary}
+              <span className="ml-2 text-xs text-gray-400">{fmtTime(new Date(c.start))} – {fmtTime(new Date(c.end))}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {open && event && (
         <div className="absolute left-0 top-full z-30 mt-2 w-[420px] rounded-2xl border border-gray-200 bg-white p-4 shadow-xl">
@@ -110,6 +125,17 @@ export function MeetingHeader({ title, onTitleChange, event }: Props) {
               </button>
             )}
           </div>
+          {choices.length > 0 && (
+            <div className="mt-3 border-t border-gray-100 pt-2">
+              <div className="px-1 pb-1 text-xs font-medium text-gray-400">Not this meeting?</div>
+              {choices.map(c => (
+                <button key={c.id} onClick={() => { onPick?.(c); setOpen(false); }} className="block w-full rounded-lg px-2 py-1.5 text-left text-sm text-gray-900 hover:bg-gray-50">
+                  {c.summary}
+                  <span className="ml-2 text-xs text-gray-400">{fmtTime(new Date(c.start))} – {fmtTime(new Date(c.end))}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="mt-3 max-h-64 overflow-y-auto border-t border-gray-100 pt-2">
             {Object.entries(groups).map(([org, people]) => (
               <div key={org} className="mb-2">

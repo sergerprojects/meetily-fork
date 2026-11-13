@@ -14,7 +14,7 @@ import { usePermissionCheck } from '@/hooks/usePermissionCheck';
 import { ModalType } from '@/hooks/useModalState';
 import { useIsLinux } from '@/hooks/usePlatform';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
-import { getCurrentOtherName, getCurrentEvent, saveLiveNotes, CalendarEvent } from '@/lib/calendar';
+import { getCurrentOtherName, getCurrentEvent, getCalendarAgenda, attachRecordingToEvent, saveLiveNotes, CalendarEvent } from '@/lib/calendar';
 
 /**
  * TranscriptPanel Component
@@ -67,6 +67,7 @@ export function TranscriptPanel({
 
   // Header context (title, who is invited) + free-form notes for the live recording.
   const [event, setEvent] = useState<CalendarEvent | null>(null);
+  const [choices, setChoices] = useState<CalendarEvent[]>([]);
   const [notes, setNotes] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
   const { isCollapsed: sidebarCollapsed } = useSidebar();
@@ -84,8 +85,13 @@ export function TranscriptPanel({
     if (!isRecording) return;
     let active = true;
     const refresh = async () => {
-      const e = await getCurrentEvent();
-      if (active) setEvent(e);
+      const [e, agenda] = await Promise.all([getCurrentEvent(), getCalendarAgenda()]);
+      if (!active) return;
+      setEvent(e);
+      const now = Date.now();
+      setChoices(
+        agenda.filter(a => a.id !== e?.id && new Date(a.start).getTime() <= now + 5 * 60_000 && new Date(a.end).getTime() > now)
+      );
     };
     refresh();
     const timer = setInterval(refresh, 30_000);
@@ -186,7 +192,17 @@ export function TranscriptPanel({
         <>
           <div className="flex justify-center px-4 pt-8">
             <div className="w-2/3 max-w-[750px]">
-              <MeetingHeader title={displayTitle} onTitleChange={setMeetingTitle} event={event} />
+              <MeetingHeader
+                title={displayTitle}
+                onTitleChange={setMeetingTitle}
+                event={event}
+                choices={choices}
+                onPick={async (picked) => {
+                  await attachRecordingToEvent(picked);
+                  setEvent(picked);
+                  setMeetingTitle(picked.summary);
+                }}
+              />
             </div>
           </div>
           <div className="flex justify-center px-4 pt-4 pb-48">

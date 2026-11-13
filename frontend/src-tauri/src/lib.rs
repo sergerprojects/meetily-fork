@@ -876,6 +876,7 @@ pub fn run() {
             chat::meeting_chat,
             chat::open_external,
             calendar::calendar_current_event,
+            calendar::calendar_attach_to_running,
             calendar::calendar_current_other_name,
             calendar::calendar_home_meetings,
             calendar::calendar_event_for_window,

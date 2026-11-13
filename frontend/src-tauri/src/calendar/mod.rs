@@ -134,6 +134,8 @@ pub(crate) struct CalendarState {
     pending: Mutex<Option<(CalendarEvent, DateTime<Utc>)>>,
     /// Event ids recorded or dismissed this app session (auto-record skips them).
     excluded: Mutex<HashSet<String>>,
+    /// Event the user picked for the recording already in progress (no age limit).
+    attach_running: Mutex<Option<CalendarEvent>>,
 }
 
 pub(crate) static STATE: Lazy<CalendarState> = Lazy::new(|| CalendarState {
@@ -146,6 +148,7 @@ pub(crate) static STATE: Lazy<CalendarState> = Lazy::new(|| CalendarState {
     upcoming: RwLock::new(Vec::new()),
     pending: Mutex::new(None),
     excluded: Mutex::new(HashSet::new()),
+    attach_running: Mutex::new(None),
 });
 
 /// Pick a source once: the pasted iCal link if there is one, otherwise gcloud
@@ -249,7 +252,7 @@ pub(crate) async fn fetch_events(
 
 static VIDEO_URL_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r#"(?i)https?://(?:[a-z0-9-]+\.)*(?:zoom\.us|zoomgov\.com|teams\.microsoft\.com|teams\.live\.com|meet\.google\.com)(?:/[^\s"'<>]*)?"#,
+        r#"(?i)https?://(?:[a-z0-9-]+\.)*(?:zoom\.us|zoomgov\.com|teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|tel\.meet)(?:/[^\s"'<>]*)?"#,
     )
     .expect("valid video url regex")
 });
@@ -280,6 +283,13 @@ pub fn detect_video_url(raw: &Value) -> Option<String> {
     if let Some(link) = raw.get("hangoutLink").and_then(|v| v.as_str()) {
         if !link.is_empty() {
             return Some(link.to_string());
+        }
+    }
+
+    // Connector-shaped events: hangoutLink is null; the link is in conferenceUrl / videoEntryPoint.
+    for ptr in ["/conferenceUrl", "/conferenceData/videoEntryPoint/uri", "/conferenceData/moreDetailsEntryPoint/uri"] {
+        if let Some(u) = raw.pointer(ptr).and_then(|v| v.as_str()).filter(|u| u.starts_with("http")) {
+            return Some(u.to_string());
         }
     }
 
@@ -400,7 +410,7 @@ pub fn best_match(
     rec_end: DateTime<Utc>,
 ) -> Option<CalendarEvent> {
     let rec_secs = (rec_end - rec_start).num_seconds().max(1) as f64;
-    let mut best: Option<(&CalendarEvent, (i64, usize, i64))> = None;
+    let mut best: Option<(&CalendarEvent, (bool, i64, i64, usize, i64))> = None;
 
     for e in events {
         let Some((es, ee)) = e.bounds() else { continue };
@@ -413,7 +423,11 @@ pub fn best_match(
         if frac < MIN_OVERLAP_FRAC {
             continue;
         }
-        let score = (ov, e.attendees.len().min(2), -(ee - es).num_seconds());
+        // Real meetings (other people on the invite) beat solo blocks; then how much of the
+        // EVENT the recording covers (a 30-min call beats a 3-hour block), then raw overlap.
+        let others = e.attendees.iter().filter(|a| !a.is_self).count();
+        let cover = ((ov as f64 / ev_secs) * 10.0).round() as i64;
+        let score = (others > 0, cover, ov, e.attendees.len().min(2), -(ee - es).num_seconds());
         if best.as_ref().map_or(true, |(_, s)| score > *s) {
             best = Some((e, score));
         }
@@ -511,8 +525,9 @@ pub async fn attach_to_saved_meeting(
     meeting_title: &str,
     folder_path: Option<&str>,
 ) -> Option<String> {
+    let forced = STATE.attach_running.lock().await.take();
     let pending = STATE.pending.lock().await.take();
-    if pending.is_none() && client().await.is_none() {
+    if forced.is_none() && pending.is_none() && client().await.is_none() {
         return None;
     }
 
@@ -520,6 +535,7 @@ pub async fn attach_to_saved_meeting(
     let window = folder.and_then(recording_window_from_metadata);
 
     let event = match pending {
+        _ if forced.is_some() => forced,
         Some((event, clicked_at))
             if window.map_or(true, |(start, _)| {
                 (start - clicked_at).num_seconds().abs() <= PENDING_MAX_AGE.num_seconds()
@@ -768,11 +784,21 @@ pub async fn calendar_home_meetings(
         .collect())
 }
 
+/// "This is the meeting": attach the recording already in progress to this event.
+#[tauri::command]
+pub async fn calendar_attach_to_running(event: CalendarEvent) {
+    STATE.excluded.lock().await.insert(event.id.clone());
+    *STATE.attach_running.lock().await = Some(event);
+}
+
 /// The calendar event for the recording in progress (the one it was started for,
 /// else the best match for right now), attendee names resolved. None when unsure.
 #[tauri::command]
 pub async fn calendar_current_event() -> Option<CalendarEvent> {
-    let mut event = if let Some((e, _)) = STATE.pending.lock().await.as_ref() {
+    let picked = STATE.attach_running.lock().await.clone();
+    let mut event = if let Some(e) = picked {
+        e
+    } else if let Some((e, _)) = STATE.pending.lock().await.as_ref() {
         e.clone()
     } else {
         let upcoming = STATE.upcoming.read().await;
@@ -914,6 +940,28 @@ mod tests {
         assert_eq!(one_other_name(&ev), None, "group meeting");
         ev.attendees = vec![mk("Amelia", false)];
         assert_eq!(one_other_name(&ev), None, "no self marker: not sure it is a 1:1");
+    }
+
+    #[test]
+    fn connector_shaped_event_has_a_video_link_and_wins_over_solo_block() {
+        let g4g = json!({
+            "id": "g", "status": "confirmed", "summary": "Specialist G4G Planning",
+            "start": {"dateTime": "2026-11-13T14:00:00-05:00"}, "end": {"dateTime": "2026-11-13T14:30:00-05:00"},
+            "hangoutLink": null, "conferenceUrl": "https://meet.google.com/kpa-gcmq-egs",
+            "conferenceData": {"videoEntryPoint": {"uri": "https://meet.google.com/kpa-gcmq-egs"}, "moreDetailsEntryPoint": {"uri": "https://tel.meet/kpa-gcmq-egs?pin=1"}},
+            "attendees": [{"email": "me@x.com", "self": true}, {"email": "kate@x.com", "displayName": "Kate"}]
+        });
+        let focus = json!({
+            "id": "f", "status": "confirmed", "summary": "Heads-Down Focus Time",
+            "start": {"dateTime": "2026-11-13T14:00:00-05:00"}, "end": {"dateTime": "2026-11-13T17:00:00-05:00"},
+            "conferenceData": {}, "attendees": [{"email": "me@x.com", "self": true}]
+        });
+        let events: Vec<CalendarEvent> = [&g4g, &focus].iter().filter_map(|r| parse_event(r)).collect();
+        assert_eq!(events[0].video_url.as_deref(), Some("https://meet.google.com/kpa-gcmq-egs"));
+        assert!(events[1].video_url.is_none());
+        let rec_start = DateTime::parse_from_rfc3339("2026-11-13T19:02:00Z").unwrap().with_timezone(&Utc);
+        let rec_end = rec_start + Duration::minutes(58); // runs long: overlap with the 3 h block grows
+        assert_eq!(best_match(&events, rec_start, rec_end).unwrap().id, "g");
     }
 
     #[test]
