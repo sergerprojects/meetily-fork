@@ -3,16 +3,17 @@ import { PermissionWarning } from '@/components/PermissionWarning';
 import { UpcomingMeetings } from '@/components/Calendar/UpcomingMeetings';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
-import { Copy, GlobeIcon } from 'lucide-react';
+import { ChevronUp, Copy, GlobeIcon, Minus } from 'lucide-react';
 import { MeetingHeader } from '@/components/Live/MeetingHeader';
 import { LiveChat } from '@/components/Live/LiveChat';
+import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { useTranscripts } from '@/contexts/TranscriptContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useRecordingState } from '@/contexts/RecordingStateContext';
 import { usePermissionCheck } from '@/hooks/usePermissionCheck';
 import { ModalType } from '@/hooks/useModalState';
 import { useIsLinux } from '@/hooks/usePlatform';
-import { useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { getCurrentOtherName, getCurrentEvent, saveLiveNotes, CalendarEvent } from '@/lib/calendar';
 
 /**
@@ -27,12 +28,15 @@ interface TranscriptPanelProps {
   isProcessingStop: boolean;
   isStopping: boolean;
   showModal: (name: ModalType, message?: string) => void;
+  /** Recording controls (pause / stop); shown in the bottom dock while recording. */
+  dock?: ReactNode;
 }
 
 export function TranscriptPanel({
   isProcessingStop,
   isStopping,
-  showModal
+  showModal,
+  dock
 }: TranscriptPanelProps) {
   // Contexts
   const { transcripts, transcriptContainerRef, copyTranscript, meetingTitle, setMeetingTitle } = useTranscripts();
@@ -64,13 +68,14 @@ export function TranscriptPanel({
   // Header context (title, who is invited) + free-form notes for the live recording.
   const [event, setEvent] = useState<CalendarEvent | null>(null);
   const [notes, setNotes] = useState('');
-  const [tab, setTab] = useState<'notes' | 'transcript'>('notes');
+  const [showTranscript, setShowTranscript] = useState(false);
+  const { isCollapsed: sidebarCollapsed } = useSidebar();
   const [wasRecording, setWasRecording] = useState(false);
 
   useEffect(() => {
     if (isRecording && !wasRecording) {
       setNotes('');
-      setTab('notes');
+      setShowTranscript(false);
     }
     setWasRecording(isRecording);
   }, [isRecording, wasRecording]);
@@ -118,9 +123,9 @@ export function TranscriptPanel({
   );
 
   return (
-    <div ref={transcriptContainerRef} className="w-full border-r border-gray-200 bg-white flex flex-col overflow-y-auto">
+    <div ref={transcriptContainerRef} className={`w-full border-r border-gray-200 flex flex-col overflow-y-auto ${showLiveView ? 'bg-[#f7f6f1]' : 'bg-white'}`}>
       {/* Title area - Sticky header */}
-      <div className="sticky top-0 z-10 bg-white p-4 border-gray-200">
+      {!showLiveView && <div className="sticky top-0 z-10 bg-white p-4 border-gray-200">
         <div className="flex flex-col space-y-3">
           <div className="flex  flex-col space-y-2">
             <div className="flex justify-center  items-center space-x-2">
@@ -155,7 +160,7 @@ export function TranscriptPanel({
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Permission Warning - Not needed on Linux */}
       {!isRecording && !isChecking && !isLinux && (
@@ -176,48 +181,31 @@ export function TranscriptPanel({
         </div>
       )}
 
-      {/* Live meeting header: title + context chips (Granola-style) */}
+      {/* Live meeting: title + chips, then notes (the transcript runs in the background) */}
       {showLiveView && (
-        <div className="flex justify-center px-4 pt-2">
-          <div className="w-2/3 max-w-[750px]">
-            <MeetingHeader title={displayTitle} onTitleChange={setMeetingTitle} event={event} />
-            <div className="mt-4 inline-flex rounded-lg bg-gray-100 p-0.5 text-sm" role="tablist">
-              {(['notes', 'transcript'] as const).map(t => (
-                <button
-                  key={t}
-                  role="tab"
-                  aria-selected={tab === t}
-                  onClick={() => setTab(t)}
-                  className={`rounded-md px-3 py-1 capitalize transition-colors ${
-                    tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
+        <>
+          <div className="flex justify-center px-4 pt-8">
+            <div className="w-2/3 max-w-[750px]">
+              <MeetingHeader title={displayTitle} onTitleChange={setMeetingTitle} event={event} />
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Free-form notes */}
-      {showLiveView && tab === 'notes' && (
-        <div className="flex justify-center px-4 pt-4 pb-32">
-          <div className="w-2/3 max-w-[750px]">
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Write notes. They are saved with the meeting and merged into your summary."
-              className="min-h-[50vh] w-full resize-none bg-transparent text-[15px] leading-7 text-gray-900 outline-none placeholder:text-gray-400"
-              aria-label="Meeting notes"
-              autoFocus
-            />
+          <div className="flex justify-center px-4 pt-4 pb-48">
+            <div className="w-2/3 max-w-[750px]">
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Write notes. The transcript is being captured in the background."
+                className="min-h-[55vh] w-full resize-none bg-transparent text-[15px] leading-7 text-gray-900 outline-none placeholder:text-gray-400"
+                aria-label="Meeting notes"
+                autoFocus
+              />
+            </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* Transcript content */}
-      {(!showLiveView || tab === 'transcript') && (
+      {/* Transcript content (not during a live meeting: it lives in the floating panel) */}
+      {!showLiveView && (
         <div className="pb-20">
           <div className="flex justify-center">
             <div className="w-2/3 max-w-[750px]">
@@ -235,22 +223,79 @@ export function TranscriptPanel({
         </div>
       )}
 
+      {/* Bottom dock: transcript toggle + recording controls + chat */}
       {isRecording && (
-        <LiveChat
-          getTranscript={() =>
-            segments
-              .map(seg => {
-                const t = Math.max(0, Math.floor(seg.timestamp));
-                const mm = String(Math.floor(t / 60)).padStart(2, '0');
-                const ss = String(t % 60).padStart(2, '0');
-                return `[${mm}:${ss}] ${seg.speaker ? seg.speaker + ': ' : ''}${seg.text}`;
-              })
-              .join('\n')
-          }
-          notes={notes}
-          title={displayTitle}
-          attendees={others.map(a => a.name)}
-        />
+        <div className="pointer-events-none fixed bottom-6 left-0 right-0 z-30">
+          <div className="flex justify-center transition-[margin] duration-300" style={{ marginLeft: sidebarCollapsed ? '4rem' : '16rem' }}>
+            <div className="pointer-events-auto relative w-2/3 max-w-[750px]">
+              {showTranscript && (
+                <div className="absolute bottom-full left-0 right-0 mb-3 flex h-[55vh] flex-col overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+                    <span className="text-sm font-medium text-gray-700">Transcript</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={copyTranscript}
+                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                        title="Copy transcript"
+                        aria-label="Copy transcript"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setShowTranscript(false)}
+                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                        title="Hide transcript"
+                        aria-label="Hide transcript"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-5 py-3">
+                    <VirtualizedTranscriptView
+                      segments={segments}
+                      isRecording={isRecording}
+                      isPaused={isPaused}
+                      isProcessing={isProcessingStop}
+                      isStopping={isStopping}
+                      enableStreaming={isRecording}
+                      showConfidence={true}
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-end gap-3">
+                <div className="flex shrink-0 items-center rounded-full border border-gray-200 bg-white shadow-lg">
+                  <button
+                    onClick={() => setShowTranscript(v => !v)}
+                    className="ml-1.5 flex h-9 w-9 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
+                    aria-label={showTranscript ? 'Hide transcript' : 'Show transcript'}
+                    aria-expanded={showTranscript}
+                    title="Transcript"
+                  >
+                    <ChevronUp className={`h-4 w-4 transition-transform ${showTranscript ? 'rotate-180' : ''}`} />
+                  </button>
+                  {dock}
+                </div>
+                <LiveChat
+                  getTranscript={() =>
+                    segments
+                      .map(seg => {
+                        const t = Math.max(0, Math.floor(seg.timestamp));
+                        const mm = String(Math.floor(t / 60)).padStart(2, '0');
+                        const ss = String(t % 60).padStart(2, '0');
+                        return `[${mm}:${ss}] ${seg.speaker ? seg.speaker + ': ' : ''}${seg.text}`;
+                      })
+                      .join('\n')
+                  }
+                  notes={notes}
+                  title={displayTitle}
+                  attendees={others.map(a => a.name)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

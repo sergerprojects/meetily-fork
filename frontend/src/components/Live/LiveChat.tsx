@@ -59,10 +59,10 @@ export function LiveChat({ getTranscript, notes, title, attendees }: Props) {
   };
 
   return (
-    <div className="sticky bottom-24 z-20 flex justify-center px-4">
-      <div className="w-2/3 max-w-[750px]">
+    <div className="relative min-w-0 flex-1">
+      <div>
         {open && (turns.length > 0 || busy || error) && (
-          <div className="mb-2 max-h-[38vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-lg">
+          <div className="absolute bottom-full left-0 right-0 mb-2 max-h-[45vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-lg">
             <div className="mb-2 flex justify-end">
               <button
                 className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
