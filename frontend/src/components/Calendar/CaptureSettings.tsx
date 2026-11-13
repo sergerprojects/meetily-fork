@@ -108,6 +108,7 @@ export function CaptureSettings() {
 
   return (
     <div className="space-y-3">
+      <h3 className="pt-2 text-lg font-semibold text-gray-900">Capture</h3>
       <div className="p-4 border rounded-lg space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex-1 pr-4">
