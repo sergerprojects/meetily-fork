@@ -180,7 +180,13 @@ pub fn matching_event(events: &[CalendarEvent], now: DateTime<Utc>) -> Option<&C
         .filter(|e| e.video_url.is_some())
         .filter_map(|e| e.bounds().map(|b| (e, b)))
         .filter(|(_, (s, end))| *s - MATCH_SLACK <= now && now <= *end + MATCH_SLACK)
-        .min_by_key(|(_, (s, _))| (*s - now).num_seconds().abs())
+        // Concurrent events: prefer ones with other people on the invite, then the
+        // closest start (to the minute), then the smaller meeting (a 1:1 over a
+        // broadcast you were merely invited to).
+        .min_by_key(|(e, (s, _))| {
+            let others = e.attendees.iter().filter(|a| !a.is_self).count();
+            (others == 0, (*s - now).num_seconds().abs() / 120, e.attendees.len())
+        })
         .map(|(e, _)| e)
 }
 
@@ -538,5 +544,46 @@ mod tests {
         assert_eq!(RecordMode::parse("auto"), Some(RecordMode::Auto));
         assert_eq!(RecordMode::parse("bogus"), None);
         assert_eq!(RecordMode::default().as_str(), "prompt");
+    }
+}
+
+#[cfg(test)]
+mod concurrent_pick_tests {
+    use super::*;
+    use crate::calendar::{CalendarAttendee, CalendarEvent};
+
+    fn ev(id: &str, end_min: i64, people: &[(&str, bool)]) -> CalendarEvent {
+        let start = DateTime::parse_from_rfc3339("2026-11-13T17:00:00Z").unwrap().with_timezone(&Utc);
+        CalendarEvent {
+            id: id.to_string(),
+            summary: id.to_string(),
+            start: start.to_rfc3339(),
+            end: (start + Duration::minutes(end_min)).to_rfc3339(),
+            attendees: people
+                .iter()
+                .map(|(n, me)| CalendarAttendee {
+                    name: n.to_string(),
+                    email: format!("{}@example.com", n),
+                    response_status: None,
+                    organizer: false,
+                    is_self: *me,
+                })
+                .collect(),
+            organizer: None,
+            html_link: None,
+            location: None,
+            description: None,
+            video_url: Some("https://meet.google.com/x".to_string()),
+        }
+    }
+
+    #[test]
+    fn one_on_one_beats_solo_broadcast_and_big_group_at_same_start() {
+        let now = DateTime::parse_from_rfc3339("2026-11-13T17:00:30Z").unwrap().with_timezone(&Utc);
+        let solo = ev("broadcast", 45, &[("me", true)]);
+        let one_on_one = ev("one-on-one", 30, &[("me", true), ("susie", false)]);
+        let group = ev("group", 60, &[("me", true), ("a", false), ("b", false), ("c", false)]);
+        let events = vec![solo, group, one_on_one];
+        assert_eq!(matching_event(&events, now).unwrap().id, "one-on-one");
     }
 }

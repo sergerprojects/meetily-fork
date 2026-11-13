@@ -718,19 +718,9 @@ pub async fn calendar_current_other_name() -> Option<String> {
     if let Some((event, _)) = STATE.pending.lock().await.as_ref() {
         return one_other_name(event);
     }
-    let now = Utc::now();
     let upcoming = STATE.upcoming.read().await;
-    let current: Vec<&CalendarEvent> = upcoming
-        .iter()
-        .filter(|e| e.bounds().map_or(false, |(s, en)| s <= now + Duration::minutes(2) && en > now))
-        .collect();
-    let pick = if current.len() == 1 {
-        Some(current[0])
-    } else {
-        let video: Vec<&&CalendarEvent> = current.iter().filter(|e| e.video_url.is_some()).collect();
-        (video.len() == 1).then(|| *video[0])
-    };
-    pick.and_then(one_other_name)
+    // Same pick as auto-record, so the live label matches the recording's title.
+    autorecord::matching_event(&upcoming, Utc::now()).and_then(one_other_name)
 }
 
 #[tauri::command]
