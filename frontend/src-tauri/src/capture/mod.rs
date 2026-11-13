@@ -3,6 +3,7 @@
 //! its own switch in Settings.
 
 pub mod clock;
+pub mod edit;
 pub mod files;
 pub mod perms;
 

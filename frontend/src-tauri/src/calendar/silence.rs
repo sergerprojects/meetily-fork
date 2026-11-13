@@ -29,6 +29,19 @@ pub fn should_stop(recording: bool, paused: bool, silent_secs: i64, limit_minute
     recording && !paused && limit_minutes > 0 && silent_secs >= limit_minutes * 60
 }
 
+/// The Mac slept between two checks (the clock jumped far past the check interval).
+pub fn slept(prev_ms: i64, now_ms: i64, interval_secs: u64) -> bool {
+    now_ms - prev_ms > (interval_secs as i64) * 3 * 1000
+}
+
+/// The calendar slot is over and the call has gone quiet: stop without waiting
+/// out the full silence limit. Never inside the slot, never while paused.
+pub fn should_stop_after_event(recording: bool, paused: bool, now_ms: i64, event_end_ms: i64, silent_secs: i64) -> bool {
+    const GRACE_AFTER_END_SECS: i64 = 5 * 60;
+    const QUIET_SECS: i64 = 2 * 60;
+    recording && !paused && now_ms >= event_end_ms + GRACE_AFTER_END_SECS * 1000 && silent_secs >= QUIET_SECS
+}
+
 pub fn stop() {
     CANCEL.cancel();
 }
@@ -64,11 +77,15 @@ pub fn start(app: AppHandle<Wry>) {
         let cancel = CANCEL.clone();
         let mut was_recording = false;
         let mut stop_sent = false;
+        let mut last_tick_ms = Utc::now().timestamp_millis();
         loop {
             tokio::select! {
                 _ = cancel.cancelled() => break,
                 _ = tokio::time::sleep(std::time::Duration::from_secs(CHECK_EVERY_SECS)) => {}
             }
+            let now_ms = Utc::now().timestamp_millis();
+            let woke = slept(last_tick_ms, now_ms, CHECK_EVERY_SECS);
+            last_tick_ms = now_ms;
             let recording = crate::audio::recording_commands::is_recording().await;
             if recording && !was_recording {
                 note_speech(); // grace period starts with the recording
@@ -79,14 +96,27 @@ pub fn start(app: AppHandle<Wry>) {
                 continue;
             }
             let paused = crate::audio::recording_commands::is_recording_paused().await;
-            let silent_secs = (Utc::now().timestamp_millis() - LAST_SPEECH_MS.load(Ordering::Relaxed)) / 1000;
+            let silent_secs = (now_ms - LAST_SPEECH_MS.load(Ordering::Relaxed)) / 1000;
             let limit = LIMIT_MINUTES.load(Ordering::Relaxed);
-            if should_stop(recording, paused, silent_secs, limit) {
+            // Why to stop, if at all. A sleep or a finished calendar slot always
+            // counts; the silence limit only when the user left it on.
+            let reason: Option<String> = if woke && !paused {
+                Some("the Mac went to sleep".to_string())
+            } else if should_stop(recording, paused, silent_secs, limit) {
+                Some(format!("no speech for {} min", limit))
+            } else if limit > 0 {
+                let end = super::calendar_current_event().await.and_then(|e| e.bounds()).map(|(_, end)| end.timestamp_millis());
+                end.filter(|end| should_stop_after_event(recording, paused, now_ms, *end, silent_secs))
+                    .map(|_| "the meeting is over".to_string())
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
                 stop_sent = true;
-                log::info!("Silence: no speech for {} min, stopping recording", limit);
+                log::info!("Auto-stop: {}, stopping recording", reason);
                 match crate::tray::stop_recording_and_save(&app).await {
-                    Ok(()) => super::poller::notify(&app, format!("Stopped recording: no speech for {} min", limit)).await,
-                    Err(e) => log::error!("Silence: auto-stop failed: {}", e),
+                    Ok(()) => super::poller::notify(&app, format!("Stopped recording: {}", reason)).await,
+                    Err(e) => log::error!("Auto-stop failed: {}", e),
                 }
             }
         }
@@ -96,6 +126,25 @@ pub fn start(app: AppHandle<Wry>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sleep_is_a_clock_jump_far_past_the_interval() {
+        assert!(!slept(0, 21_000, 20));
+        assert!(!slept(0, 59_000, 20));
+        assert!(slept(0, 61_000, 20));
+        assert!(slept(0, 3_600_000, 20));
+    }
+
+    #[test]
+    fn stops_after_the_slot_only_when_quiet_and_past_grace() {
+        let end = 1_000_000_000;
+        let grace = 5 * 60 * 1000;
+        assert!(!should_stop_after_event(true, false, end + grace - 1, end, 600), "still inside the grace period");
+        assert!(!should_stop_after_event(true, false, end + grace, end, 119), "someone is still talking");
+        assert!(should_stop_after_event(true, false, end + grace, end, 120));
+        assert!(!should_stop_after_event(true, true, end + grace, end, 600), "paused");
+        assert!(!should_stop_after_event(false, false, end + grace, end, 600), "not recording");
+    }
 
     #[test]
     fn stops_only_after_the_limit_while_recording_and_not_paused() {

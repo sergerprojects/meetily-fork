@@ -5,6 +5,8 @@ import { TranscriptView } from '@/components/TranscriptView';
 import { VirtualizedTranscriptView } from '@/components/VirtualizedTranscriptView';
 import { TranscriptButtonGroup } from './TranscriptButtonGroup';
 import { useMemo } from 'react';
+import { toast } from 'sonner';
+import { deleteTranscriptSegment, relabelSpeaker } from '@/lib/capture';
 
 interface TranscriptPanelProps {
   transcripts: Transcript[];
@@ -95,6 +97,22 @@ export function TranscriptPanel({
           totalCount={totalCount}
           loadedCount={loadedCount}
           onLoadMore={onLoadMore}
+          onDeleteSegment={meetingId && onRefetchTranscripts ? async (id) => {
+            try {
+              await deleteTranscriptSegment(meetingId, id);
+              await onRefetchTranscripts();
+            } catch (e) {
+              toast.error(`Could not delete the line: ${e}`);
+            }
+          } : undefined}
+          onRenameSpeaker={meetingId && onRefetchTranscripts ? async (from, to) => {
+            try {
+              await relabelSpeaker(meetingId, from, to);
+              await onRefetchTranscripts();
+            } catch (e) {
+              toast.error(`Could not rename the speaker: ${e}`);
+            }
+          } : undefined}
         />
       </div>
 

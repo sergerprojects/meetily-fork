@@ -42,3 +42,10 @@ export const probeCallApp = (app: 'zoom' | 'teams' | 'chrome') =>
 /** Copy one snapshot into Downloads; resolves to the new file's path. */
 export const exportMeetingImage = (folder: string, name: string) =>
   invoke<string>('export_meeting_image', { folder, name });
+
+/** Remove one line from a saved transcript. */
+export const deleteTranscriptSegment = (meetingId: string, segmentId: string) =>
+  invoke<number>('delete_transcript_segment', { meetingId, segmentId });
+/** Rename a speaker for the whole saved meeting. */
+export const relabelSpeaker = (meetingId: string, from: string, to: string) =>
+  invoke<number>('relabel_speaker', { meetingId, from, to });
