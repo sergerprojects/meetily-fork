@@ -8,10 +8,13 @@ static ANALYTICS_CLIENT: std::sync::Mutex<Option<Arc<AnalyticsClient>>> = std::s
 
 #[command]
 pub async fn init_analytics() -> Result<(), String> {
+    // FORK: telemetry is permanently off. Upstream ships its own PostHog
+    // project key here; this fork sends nothing to anyone. An empty key and
+    // enabled: false make AnalyticsClient create no network client.
     let config = AnalyticsConfig {
-        api_key: "phc_ohznXPkRSJYWmrfez9mYxtXv5U5Nekq3iiUts87dJfcr".to_string(),
-        host: Some("https://us.i.posthog.com".to_string()),
-        enabled: true,
+        api_key: String::new(),
+        host: None,
+        enabled: false,
     };
     
     let client = Arc::new(AnalyticsClient::new(config).await);

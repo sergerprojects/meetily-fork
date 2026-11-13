@@ -35,7 +35,7 @@ The app picks a calendar source in this order: a pasted private iCal link, other
 
 ### How it was bound for the original author (gcloud, worked)
 
-The author's credentials file uses gcloud's own sign-in client with a personal Google Cloud project (name like `ehc-<username>-<number>`) as the quota project; such projects appear to be provisioned per employee, so check `gcloud projects list`. If the person has one, no shared project is needed. These are the standard commands for that setup (the exact original commands were not recorded):
+The author's setup used gcloud's own sign-in client with a personal Google Cloud project as the quota project. Some organizations provision such a project per employee, so check `gcloud projects list`. If the person has one, no shared project is needed; otherwise they need a project with the Calendar API enabled. These are the standard commands for that setup (the exact original commands were not recorded):
 
 ```bash
 gcloud auth application-default login \
@@ -50,7 +50,7 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 
 ### Other sources you can try or add
 
-- **Private iCal link**: Google Calendar → Settings → your calendar → Integrate calendar → "Secret address in iCal format", pasted into Settings → Recording. It is built and tested against fixtures. It did **not** work for the author because the company admin hides that address. Never use the "Public address" instead: it requires making the whole calendar public.
+- **Private iCal link**: Google Calendar → Settings → your calendar → Integrate calendar → "Secret address in iCal format", pasted into Settings → Recording. It is built and tested against fixtures. It did **not** work for the author: their organization's Google admin hides that address, as many do. Never use the "Public address" instead: it requires making the whole calendar public.
 - **macOS Calendar app (EventKit)**: if the person's Google account is already in Calendar.app this could read it with no Google sign-in at all. Not built; untested whether Meet links come through. A command-line probe cannot trigger the permission prompt, so it must run inside the app bundle with `NSCalendarsFullAccessUsageDescription` in its Info.plist.
 - **Anything else** (Outlook/Graph, CalDAV, a file your own scheduled job writes): add a variant to `Source` in `calendar/mod.rs`. A source only has to return events as Google-Calendar-API-shaped JSON from `list_events(min, max)`; `parse_event` does the rest. `calendar/ical.rs` is a worked example.
 
@@ -58,7 +58,8 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 
 - Treat any calendar link or credential as a password. Never put it in a repo, log, chat summary or commit.
 - Ask the person before changing their account, enabling APIs or running `gcloud auth`. Their browser sign-in is theirs to do.
-- Company admin settings may block a path. Report the block; do not work around it.
+- Organization admin settings may block a path. Report the block; do not work around it.
+- **Recording consent:** recording a call can require consent from everyone on it, depending on where they are and on your employer's policy. Make sure the person knows this before enabling automatic recording.
 
 ## 3. Verify
 
@@ -69,6 +70,6 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 ## Notes
 
 - Recordings: `~/Movies/meetily-recordings/`. Database: `~/Library/Application Support/com.meetily.ai/meeting_minutes.sqlite` (SQLite WAL: copy with `sqlite3 ... ".backup"`, never `cp`).
-- Leave Meetily's built-in summary and its API-key providers alone unless the person's company has approved sending transcripts to that provider.
+- Leave Meetily's built-in summary and its API-key providers alone unless the person's organization has approved sending transcripts to that provider.
 - This app shares a bundle id with upstream Meetily, so only one can be installed.
 - Code map: calendar in `frontend/src-tauri/src/calendar/` (`google.rs`, `ical.rs`, `poller.rs`, `autorecord.rs`, `mic_activity.rs`); speaker labels in `frontend/src-tauri/src/audio/pipeline.rs`; launch at login in `lib.rs` (`tauri-plugin-autostart`).

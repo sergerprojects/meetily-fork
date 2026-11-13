@@ -599,7 +599,7 @@ END:VCALENDAR\r\n";
     fn owner_from_google_url() {
         assert_eq!(
             owner_email_from_url("https://calendar.google.com/calendar/ical/Jane.Doe%40example.com/private-abc123/basic.ics").as_deref(),
-            Some("chris.serger@example.com")
+            Some("jane.doe@example.com")
         );
         assert_eq!(owner_email_from_url("https://example.com/feed.ics"), None);
     }

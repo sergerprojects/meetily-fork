@@ -1,3 +1,22 @@
+> ## About this fork
+>
+> This is an **unofficial, community fork** of [Meetily](https://github.com/Zackriya-Solutions/meetily) by [Zackriya Solutions](https://www.zackriya.com), used under the MIT License. All credit for the app, the on-device transcription pipeline and the original design goes to the Meetily authors and contributors. This fork is **not affiliated with, endorsed by, or supported by Zackriya Solutions**; the Meetily name and logo are theirs. If you want the maintained product, use [upstream](https://github.com/Zackriya-Solutions/meetily) and its [releases](https://github.com/Zackriya-Solutions/meetily/releases).
+>
+> Based on upstream commit `07c4dfd` (v0.4.1). The original copyright notice is kept in [LICENSE.md](LICENSE.md); changes in this fork are released under the same MIT License, with no warranty.
+>
+> **What this fork changes**
+> - "You / Others" speaker labels on transcripts (microphone vs. system audio)
+> - Calendar awareness: meeting titles and attendees on recordings, a menu-bar list of upcoming meetings, a prompt (or optional auto-record) when you join a call. Sources: a private iCal link or Google credentials from `gcloud`
+> - Launch at login (macOS)
+> - Upstream auto-update disabled (it would overwrite this fork)
+> - Upstream usage analytics permanently disabled: this fork contains no telemetry key and sends nothing
+>
+> **Status:** built and used on macOS (Apple Silicon) only. Windows and Linux are untested. To install, point your AI agent at [SETUP-FOR-AGENTS.md](SETUP-FOR-AGENTS.md) or run `scripts/install-mac.sh`. Recording calls can require everyone's consent where you live; you are responsible for complying.
+>
+> The rest of this README is upstream's, unchanged.
+
+---
+
 <div align="center" style="border-bottom: none">
     <h1>
         <img src="docs/Meetily-6.png" style="border-radius: 10px;" />
