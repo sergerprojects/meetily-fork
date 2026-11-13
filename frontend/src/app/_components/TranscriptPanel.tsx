@@ -286,24 +286,34 @@ export function TranscriptPanel({
                       {speakerLabels.map(label => (
                         <label key={label} className="inline-flex items-center gap-1.5">
                           <span>{label}</span>
-                          <select
-                            value={speakerNames[label] ?? ''}
-                            onChange={e => setSpeakerNames(m => ({ ...m, [label]: e.target.value }))}
-                            className="max-w-[160px] rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-800"
-                            aria-label={`Who is ${label}`}
-                          >
-                            <option value="">Not sure</option>
-                            {others.map(a => (
-                              <option key={a.email} value={a.name}>
-                                {a.name}
-                              </option>
-                            ))}
-                          </select>
+                          {others.length > 0 ? (
+                            <select
+                              value={speakerNames[label] ?? ''}
+                              onChange={e => setSpeakerNames(m => ({ ...m, [label]: e.target.value }))}
+                              className="max-w-[160px] rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-800"
+                              aria-label={`Who is ${label}`}
+                            >
+                              <option value="">Not sure</option>
+                              {others.map(a => (
+                                <option key={a.email} value={a.name}>
+                                  {a.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              value={speakerNames[label] ?? ''}
+                              onChange={e => setSpeakerNames(m => ({ ...m, [label]: e.target.value }))}
+                              placeholder="Name"
+                              className="w-28 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-800"
+                              aria-label={`Who is ${label}`}
+                            />
+                          )}
                         </label>
                       ))}
                     </div>
                   )}
-                  <div className="flex-1 overflow-y-auto px-5 py-3">
+                  <div className="min-h-0 flex-1 px-5 py-3">
                     <VirtualizedTranscriptView
                       segments={segments}
                       isRecording={isRecording}
