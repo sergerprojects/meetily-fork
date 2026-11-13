@@ -14,6 +14,7 @@ pub mod ical;
 pub mod mic_activity;
 pub mod people;
 pub mod poller;
+pub mod silence;
 
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
 use once_cell::sync::Lazy;
@@ -426,7 +427,8 @@ pub fn one_other_name(event: &CalendarEvent) -> Option<String> {
         return None;
     }
     let others: Vec<&CalendarAttendee> = event.attendees.iter().filter(|a| !a.is_self).collect();
-    (others.len() == 1 && !others[0].name.trim().is_empty()).then(|| others[0].name.trim().to_string())
+    (others.len() == 1 && !others[0].name.trim().is_empty())
+        .then(|| people::lookup(&others[0].email).unwrap_or_else(|| others[0].name.trim().to_string()))
 }
 
 /// Should the poller prompt for this event right now?

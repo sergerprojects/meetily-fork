@@ -21,6 +21,8 @@ import {
   getCalendarRecordMode,
   getCalendarStatus,
   getIgnoredApps,
+  getSilenceStopMinutes,
+  setSilenceStopMinutes,
   setIgnoredApps,
   getUpcomingCalendarEvents,
   setCalendarIcalUrl,
@@ -42,10 +44,12 @@ export function CalendarSettings() {
   const [linkInput, setLinkInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [ignoredText, setIgnoredText] = useState('');
+  const [silenceMinutes, setSilenceMinutes] = useState('10');
 
   useEffect(() => {
     isEnabled().then(setLaunchAtLogin).catch(() => setLaunchAtLogin(null));
     getIgnoredApps().then(apps => setIgnoredText(apps.join(', ')));
+    getSilenceStopMinutes().then(m => setSilenceMinutes(String(m)));
   }, []);
 
   const handleLaunchAtLogin = async (checked: boolean) => {
@@ -103,6 +107,17 @@ export function CalendarSettings() {
       await refreshEvents();
     } catch (error) {
       toast.error('Could not remove calendar link', { description: String(error) });
+    }
+  };
+
+  const handleSilenceChange = async (value: string) => {
+    const previous = silenceMinutes;
+    setSilenceMinutes(value);
+    try {
+      await setSilenceStopMinutes(Number(value));
+    } catch (error) {
+      setSilenceMinutes(previous);
+      toast.error('Failed to save', { description: String(error) });
     }
   };
 
@@ -202,6 +217,27 @@ export function CalendarSettings() {
             {(Object.keys(MODE_LABELS) as CalendarRecordMode[]).map(m => (
               <SelectItem key={m} value={m}>
                 {MODE_LABELS[m]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center justify-between p-4 border rounded-lg">
+        <div className="flex-1 pr-4">
+          <div className="font-medium">Stop recording when nobody is talking</div>
+          <div className="text-sm text-gray-600">
+            Ends and saves a recording after this long with no speech in the transcript. Never while paused.
+          </div>
+        </div>
+        <Select value={silenceMinutes} onValueChange={handleSilenceChange}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[['0', 'Never'], ['3', 'After 3 minutes'], ['5', 'After 5 minutes'], ['10', 'After 10 minutes'], ['15', 'After 15 minutes'], ['30', 'After 30 minutes']].map(([v, label]) => (
+              <SelectItem key={v} value={v}>
+                {label}
               </SelectItem>
             ))}
           </SelectContent>

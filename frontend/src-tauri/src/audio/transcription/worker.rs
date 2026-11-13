@@ -225,6 +225,7 @@ pub fn start_transcription_task<R: Runtime>(
                                             speaker: Some(chunk_speaker.to_string()),
                                         };
 
+                                        crate::calendar::silence::note_speech();
                                         if let Err(e) = app_clone.emit("transcript-update", &update)
                                         {
                                             error!(

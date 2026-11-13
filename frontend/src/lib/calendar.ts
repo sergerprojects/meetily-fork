@@ -183,3 +183,16 @@ export async function getIgnoredApps(): Promise<string[]> {
 export async function setIgnoredApps(apps: string[]): Promise<void> {
   await invoke('set_ignored_apps', { apps });
 }
+
+/** Minutes without speech before a recording stops itself; 0 = never. */
+export async function getSilenceStopMinutes(): Promise<number> {
+  try {
+    return await invoke<number>('get_silence_stop_minutes');
+  } catch {
+    return 10;
+  }
+}
+
+export async function setSilenceStopMinutes(minutes: number): Promise<void> {
+  await invoke('set_silence_stop_minutes', { minutes });
+}

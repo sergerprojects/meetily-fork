@@ -571,6 +571,7 @@ pub fn run() {
             calendar::poller::start(_app.handle().clone());
             // Mic-activity "joined a call" watcher for auto-record (macOS only)
             calendar::autorecord::start(_app.handle().clone());
+            calendar::silence::start(_app.handle().clone());
 
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
@@ -876,6 +877,8 @@ pub fn run() {
             calendar::calendar_dismiss_event,
             calendar::autorecord::get_calendar_record_mode,
             calendar::autorecord::get_ignored_apps,
+            calendar::silence::get_silence_stop_minutes,
+            calendar::silence::set_silence_stop_minutes,
             calendar::autorecord::set_ignored_apps,
             calendar::autorecord::set_calendar_record_mode,
         ])
@@ -891,6 +894,7 @@ pub fn run() {
                     log::info!("Application exiting, cleaning up resources...");
                     calendar::poller::stop();
                     calendar::autorecord::stop();
+                    calendar::silence::stop();
                     tauri::async_runtime::block_on(async {
                         // Clean up database connection and checkpoint WAL
                         if let Some(app_state) = _app_handle.try_state::<state::AppState>() {
