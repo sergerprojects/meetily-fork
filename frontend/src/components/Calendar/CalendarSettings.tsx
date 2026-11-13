@@ -20,6 +20,7 @@ import {
   formatEventTime,
   getCalendarRecordMode,
   getCalendarStatus,
+  setCalendarSource,
   getIgnoredApps,
   getSilenceStopMinutes,
   setSilenceStopMinutes,
@@ -44,6 +45,7 @@ export function CalendarSettings() {
   const [linkInput, setLinkInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [ignoredText, setIgnoredText] = useState('');
+  const [sourceBusy, setSourceBusy] = useState(false);
   const [silenceMinutes, setSilenceMinutes] = useState('10');
 
   useEffect(() => {
@@ -85,6 +87,20 @@ export function CalendarSettings() {
     const [s, upcoming] = await Promise.all([getCalendarStatus(), getUpcomingCalendarEvents()]);
     setStatus(s);
     setEvents(upcoming.slice(0, 3));
+  };
+
+  const handleSource = async (source: 'claude' | 'google') => {
+    setSourceBusy(true);
+    try {
+      await setCalendarSource(source);
+      toast.success(source === 'claude' ? 'Reading your calendar through Claude. The first refresh takes up to 30 seconds.' : 'Back to Google sign-in');
+      setTimeout(() => refreshEvents(), 35_000);
+      await refreshEvents();
+    } catch (error) {
+      toast.error('Could not switch', { description: String(error) });
+    } finally {
+      setSourceBusy(false);
+    }
   };
 
   const handleConnect = async () => {
@@ -173,9 +189,30 @@ export function CalendarSettings() {
           {status === null
             ? 'Checking…'
             : status.enabled
-              ? `Connected via ${status.source === 'ical' ? 'private iCal link' : 'Google sign-in (gcloud)'}${status.reason ? ` (last sync error: ${status.reason})` : ''}`
+              ? `Connected via ${status.source === 'ical' ? 'private iCal link' : status.source === 'claude' ? 'your Claude Google connection' : 'Google sign-in (gcloud)'}${status.reason ? ` (last sync error: ${status.reason})` : ''}`
               : `Not connected${status.reason ? ` — ${status.reason}` : ''}`}
         </div>
+        {status?.source !== 'ical' && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
+            <div className="text-sm text-gray-700">
+              <div className="font-medium">
+                {status?.source === 'claude' ? 'Using your Claude Google connection' : 'Use your Claude Google connection'}
+              </div>
+              <div className="text-xs text-gray-500">
+                Reads your calendar through the Google Calendar connector already signed in to Claude. No Google Cloud project. Sign the connector in once (run /mcp in Claude Code). Refreshes about every 8 minutes.
+              </div>
+            </div>
+            {status?.source === 'claude' ? (
+              <Button size="sm" variant="outline" onClick={() => handleSource('google')} disabled={sourceBusy}>
+                Switch back
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => handleSource('claude')} disabled={sourceBusy}>
+                {sourceBusy ? 'Switching…' : 'Use it'}
+              </Button>
+            )}
+          </div>
+        )}
         {status?.source === 'ical' ? (
           <Button variant="outline" size="sm" onClick={handleDisconnect}>
             Remove link

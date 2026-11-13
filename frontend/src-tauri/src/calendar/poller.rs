@@ -28,7 +28,7 @@ pub fn start(app: AppHandle<Wry>) {
     tauri::async_runtime::spawn(async move {
         // No early return when nothing is configured: the user can paste an
         // iCal link later and the loop picks the new source up.
-        init_client(load_ical_url(&app)).await;
+        init_client(load_ical_url(&app), super::load_prefers_claude(&app)).await;
         let cancel = CANCEL.clone();
         let mut prompted: HashSet<String> = HashSet::new();
         let mut last_error: Option<String> = None;

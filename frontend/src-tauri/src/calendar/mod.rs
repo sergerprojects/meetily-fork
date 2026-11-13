@@ -9,6 +9,7 @@
 //! the app behaves exactly as before.
 
 pub mod autorecord;
+pub mod claude_cal;
 pub mod google;
 pub mod ical;
 pub mod mic_activity;
@@ -27,6 +28,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+use claude_cal::ClaudeCalendar;
 use google::GoogleCalendarClient;
 use ical::IcalClient;
 
@@ -34,6 +36,7 @@ use ical::IcalClient;
 pub(crate) enum Source {
     Google(Arc<GoogleCalendarClient>),
     Ical(Arc<IcalClient>),
+    Claude(Arc<ClaudeCalendar>),
 }
 
 impl Source {
@@ -41,13 +44,14 @@ impl Source {
         match self {
             Source::Google(c) => c.list_events(min, max).await,
             Source::Ical(c) => c.list_events(min, max).await,
+            Source::Claude(c) => c.list_events(min, max).await,
         }
     }
 
     async fn directory_name(&self, email: &str) -> anyhow::Result<Option<String>> {
         match self {
             Source::Google(c) => c.directory_name(email).await,
-            Source::Ical(_) => Ok(None),
+            Source::Ical(_) | Source::Claude(_) => Ok(None),
         }
     }
 
@@ -55,6 +59,7 @@ impl Source {
         match self {
             Source::Google(_) => "google",
             Source::Ical(_) => "ical",
+            Source::Claude(_) => "claude",
         }
     }
 }
@@ -145,7 +150,7 @@ pub(crate) static STATE: Lazy<CalendarState> = Lazy::new(|| CalendarState {
 
 /// Pick a source once: the pasted iCal link if there is one, otherwise gcloud
 /// credentials. Returns false (feature off) when neither works.
-pub(crate) async fn init_client(ical_url: Option<String>) -> bool {
+pub(crate) async fn init_client(ical_url: Option<String>, prefer_claude: bool) -> bool {
     if let Some(url) = ical_url {
         *STATE.client.write().await = Some(Arc::new(Source::Ical(Arc::new(IcalClient::new(url)))));
         *STATE.status.write().await = CalendarStatus {
@@ -154,6 +159,16 @@ pub(crate) async fn init_client(ical_url: Option<String>) -> bool {
             source: Some("ical".to_string()),
         };
         log::info!("Calendar: using private iCal link");
+        return true;
+    }
+    if prefer_claude {
+        *STATE.client.write().await = Some(Arc::new(Source::Claude(Arc::new(ClaudeCalendar::new()))));
+        *STATE.status.write().await = CalendarStatus {
+            enabled: true,
+            reason: None,
+            source: Some("claude".to_string()),
+        };
+        log::info!("Calendar: using the Claude Google connector");
         return true;
     }
     match google::AdcCredentials::load() {
@@ -576,6 +591,46 @@ pub async fn attach_to_saved_meeting(
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+const SOURCE_KEY: &str = "calendar_source";
+
+/// True when the user chose the Claude connector as the calendar source.
+pub(crate) fn load_prefers_claude<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    use tauri_plugin_store::StoreExt;
+    app.store(ical::STORE_FILE)
+        .ok()
+        .and_then(|st| st.get(SOURCE_KEY))
+        .and_then(|v| v.as_str().map(|s| s == "claude"))
+        .unwrap_or(false)
+}
+
+/// Pick the calendar source: "claude" (your Claude Google connector) or "google" (gcloud sign-in).
+#[tauri::command]
+pub async fn calendar_set_source(app: tauri::AppHandle<tauri::Wry>, source: String) -> Result<CalendarStatus, String> {
+    use tauri_plugin_store::StoreExt;
+    if source != "claude" && source != "google" {
+        return Err("unknown source".to_string());
+    }
+    let store = app.store(ical::STORE_FILE).map_err(|e| format!("Failed to access store: {}", e))?;
+    store.set(SOURCE_KEY, serde_json::json!(source));
+    store.save().map_err(|e| format!("Failed to save store: {}", e))?;
+    init_client(load_ical_url(&app), source == "claude").await;
+    // Refresh now; the first Claude fetch takes a while, so the UI shows the status immediately.
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let now = Utc::now();
+        let horizon = end_of_tomorrow(&now.with_timezone(&chrono::Local));
+        match fetch_events(now - Duration::minutes(15), horizon).await {
+            Ok(events) => {
+                *STATE.upcoming.write().await = events.clone();
+                crate::tray::set_calendar_events(&handle, true, &events);
+                STATE.status.write().await.reason = None;
+            }
+            Err(e) => STATE.status.write().await.reason = Some(e.to_string()),
+        }
+    });
+    Ok(STATE.status.read().await.clone())
+}
+
 /// Saved iCal link from the app store, if any. Never logged.
 pub(crate) fn load_ical_url<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<String> {
     use tauri_plugin_store::StoreExt;
@@ -606,7 +661,7 @@ pub async fn calendar_set_ical_url(
             let count = probe.validate().await.map_err(|e| e.to_string())?;
             store.set(ical::STORE_KEY, serde_json::json!(url));
             store.save().map_err(|e| format!("Failed to save store: {}", e))?;
-            init_client(Some(url)).await;
+            init_client(Some(url), false).await;
             log::info!("Calendar: iCal link connected ({} events in the next week)", count);
             // Show meetings right away instead of waiting for the next poll.
             let now = Utc::now();
@@ -619,7 +674,7 @@ pub async fn calendar_set_ical_url(
         None => {
             store.delete(ical::STORE_KEY);
             store.save().map_err(|e| format!("Failed to save store: {}", e))?;
-            init_client(None).await;
+            init_client(None, load_prefers_claude(&app)).await;
             if !STATE.status.read().await.enabled {
                 STATE.upcoming.write().await.clear();
                 crate::tray::set_calendar_events(&app, false, &[]);

@@ -110,10 +110,6 @@ pub async fn meeting_chat(
     if question.trim().is_empty() {
         return Err("Type a question first.".to_string());
     }
-    let claude = find_claude().ok_or_else(|| {
-        "Claude Code isn't installed on this Mac. Install it from claude.com/claude-code, sign in once in Terminal, then try again."
-            .to_string()
-    })?;
     let model = match model.as_deref() {
         Some("haiku") => "haiku",
         Some("opus") => "opus",
@@ -121,6 +117,22 @@ pub async fn meeting_chat(
     };
     let prompt = build_prompt(&question, &transcript, &notes, &title, &attendees, &history);
 
+    run_claude(&prompt, model, &[], TIMEOUT).await
+}
+
+/// Run the user's Claude Code CLI headlessly with a prompt on stdin. With no
+/// `allowed_tools` every tool is disabled; otherwise only those (e.g. a Google
+/// Calendar connector tool) may run. Minimal environment, scratch directory.
+pub async fn run_claude(
+    prompt: &str,
+    model: &str,
+    allowed_tools: &[&str],
+    timeout: Duration,
+) -> Result<String, String> {
+    let claude = find_claude().ok_or_else(|| {
+        "Claude Code isn't installed on this Mac. Install it from claude.com/claude-code, sign in once in Terminal, then try again."
+            .to_string()
+    })?;
     let h = home().unwrap_or_default();
     let path = format!(
         "{}:{}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
@@ -128,8 +140,13 @@ pub async fn meeting_chat(
         h.join(".claude/local").display()
     );
     let mut cmd = Command::new(&claude);
-    cmd.args(["-p", "--setting-sources", "user", "--tools", "", "--model", model])
-        .env_clear()
+    cmd.args(["-p", "--setting-sources", "user", "--model", model]);
+    if allowed_tools.is_empty() {
+        cmd.args(["--tools", ""]);
+    } else {
+        cmd.args(["--allowedTools", &allowed_tools.join(",")]);
+    }
+    cmd.env_clear()
         .env("HOME", &h)
         .env("PATH", path)
         .env("USER", std::env::var("USER").unwrap_or_default())
@@ -144,7 +161,7 @@ pub async fn meeting_chat(
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(prompt.as_bytes()).await.map_err(|e| e.to_string())?;
     }
-    let out = tokio::time::timeout(TIMEOUT, child.wait_with_output())
+    let out = tokio::time::timeout(timeout, child.wait_with_output())
         .await
         .map_err(|_| "Claude took too long to answer. Try a shorter question.".to_string())?
         .map_err(|e| e.to_string())?;

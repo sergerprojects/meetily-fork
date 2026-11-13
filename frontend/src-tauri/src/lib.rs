@@ -870,6 +870,7 @@ pub fn run() {
             audio::import::is_import_in_progress_command,
             calendar::calendar_status,
             calendar::calendar_set_ical_url,
+            calendar::calendar_set_source,
             calendar::calendar_upcoming,
             calendar::calendar_agenda,
             chat::meeting_chat,
