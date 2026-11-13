@@ -30,6 +30,8 @@ pub struct ApiResponse<T> {
 pub struct Meeting {
     pub id: String,
     pub title: String,
+    /// When the meeting was created (RFC 3339), for grouping by day.
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -347,6 +349,7 @@ pub async fn api_get_meetings<R: Runtime>(
                 .map(|m| Meeting {
                     id: m.id,
                     title: m.title,
+                    created_at: m.created_at.0.to_rfc3339(),
                 })
                 .collect();
             Ok(result)

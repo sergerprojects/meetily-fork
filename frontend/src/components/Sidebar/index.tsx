@@ -38,6 +38,7 @@ interface SidebarItem {
   title: string;
   type: 'folder' | 'file';
   children?: SidebarItem[];
+  createdAt?: string;
 }
 
 const Sidebar: React.FC = () => {
@@ -556,6 +557,39 @@ const Sidebar: React.FC = () => {
     return searchResults.find(result => result.id === itemId);
   };
 
+  // Meetings grouped by day: a small heading whenever the day changes.
+  const dayLabel = (iso?: string): string | null => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diffDays = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  const timeLabel = (iso?: string): string | null => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const renderChildren = (parent: SidebarItem, depth: number) => {
+    const group = parent.id === 'meetings' && !searchQuery.trim();
+    let lastDay: string | null = null;
+    return (parent.children ?? []).map(child => {
+      const day = group ? dayLabel(child.createdAt) : null;
+      const header = day && day !== lastDay ? (
+        <div key={`day-${child.id}`} className="px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          {day}
+        </div>
+      ) : null;
+      if (day) lastDay = day;
+      return [header, renderItem(child, depth)];
+    });
+  };
+
   const renderItem = (item: SidebarItem, depth = 0) => {
     const isExpanded = expandedFolders.has(item.id);
     const paddingLeft = `${depth * 8 + 8}px`;
@@ -620,7 +654,12 @@ const Sidebar: React.FC = () => {
                     <Plus className="w-3.5 h-3.5 text-blue-600" />
                   </div>
                 )}
-                <span className="flex-1 min-w-0 break-words line-clamp-3 leading-snug">{item.title}</span>
+                <span className="flex-1 min-w-0 break-words line-clamp-3 leading-snug">
+                  {item.title}
+                  {isMeetingItem && timeLabel(item.createdAt) && (
+                    <span className="block text-xs font-normal text-gray-500">{timeLabel(item.createdAt)}</span>
+                  )}
+                </span>
                 {isMeetingItem && (
                   <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5 rounded-md bg-white/95 shadow-sm border border-gray-100 px-0.5">
                     <button
@@ -658,7 +697,7 @@ const Sidebar: React.FC = () => {
         </div>
         {item.type === 'folder' && isExpanded && item.children && (
           <div className="ml-1">
-            {item.children.map(child => renderItem(child, depth + 1))}
+            {renderChildren(item, depth + 1)}
           </div>
         )}
       </div>
@@ -767,7 +806,7 @@ const Sidebar: React.FC = () => {
                   .filter(item => item.type === 'folder' && expandedFolders.has(item.id) && item.children)
                   .map(item => (
                     <div key={`${item.id}-children`} className="mx-3">
-                      {item.children!.map(child => renderItem(child, 1))}
+                      {renderChildren(item, 1)}
                     </div>
                   ))}
               </div>

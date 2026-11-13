@@ -75,6 +75,12 @@ export function TranscriptPanel({
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const { isCollapsed: sidebarCollapsed } = useSidebar();
   const [wasRecording, setWasRecording] = useState(false);
+  // ⌘1 / ⌘2 switch between notes and the transcript panel.
+  useEffect(() => {
+    const onView = (e: Event) => setShowTranscript((e as CustomEvent<string>).detail === 'transcript');
+    window.addEventListener('graphite-view', onView);
+    return () => window.removeEventListener('graphite-view', onView);
+  }, []);
   // Folder of the recording in progress (snapshots are saved there).
   const [liveFolder, setLiveFolder] = useState<string | null>(null);
   useEffect(() => {

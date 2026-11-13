@@ -1,5 +1,6 @@
 'use client'
 
+import { AppShortcuts } from '@/components/AppShortcuts';
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
 import { SidebarProvider } from '@/components/Sidebar/SidebarProvider'
@@ -253,6 +254,7 @@ export default function RootLayout({
                                 <OnboardingFlow onComplete={handleOnboardingComplete} />
                               ) : (
                                 <div className="flex">
+                                  <AppShortcuts />
                                   <Sidebar />
                                   <MainContent>{children}</MainContent>
                                 </div>
