@@ -99,6 +99,7 @@ fn finalize_recording_start() {
     reset_speech_detected_flag(); // reset speech-detected emit latch for the new session
     // Live "who is speaking" helper (optional; stays off if not set up).
     tokio::spawn(super::live_speakers::start());
+    crate::capture::clock::note_start();
 }
 
 // Global recording manager and transcription task to keep them alive during recording
@@ -1017,6 +1018,7 @@ pub async fn stop_recording<R: Runtime>(
     );
 
     super::live_speakers::stop().await;
+    crate::capture::clock::note_stop();
 
     // Perform final cleanup with the manager if available
     let (meeting_folder, meeting_name) = if let Some(mut manager) = manager_for_cleanup {
@@ -1131,6 +1133,7 @@ pub async fn pause_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), String
     let manager_guard = RECORDING_MANAGER.lock().unwrap();
     if let Some(manager) = manager_guard.as_ref() {
         manager.pause_recording().map_err(|e| e.to_string())?;
+        crate::capture::clock::note_pause();
 
         // Emit pause event to frontend
         app.emit(
@@ -1165,6 +1168,7 @@ pub async fn resume_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), Strin
     let manager_guard = RECORDING_MANAGER.lock().unwrap();
     if let Some(manager) = manager_guard.as_ref() {
         manager.resume_recording().map_err(|e| e.to_string())?;
+        crate::capture::clock::note_resume();
 
         // Emit resume event to frontend
         app.emit(

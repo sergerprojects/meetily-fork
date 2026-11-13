@@ -40,6 +40,7 @@ pub mod chat;
 pub mod api;
 pub mod audio;
 pub mod calendar;
+pub mod capture;
 pub mod config;
 pub mod console_utils;
 pub mod database;
@@ -890,6 +891,15 @@ pub fn run() {
             calendar::autorecord::get_ignored_apps,
             calendar::silence::get_silence_stop_minutes,
             calendar::silence::set_silence_stop_minutes,
+            capture::capture_status,
+            capture::capture_request_accessibility,
+            capture::capture_request_screen,
+            capture::set_capture_names,
+            capture::set_capture_snapshots,
+            capture::files::list_meeting_images,
+            capture::files::read_meeting_image,
+            capture::files::delete_meeting_image,
+            capture::files::read_meeting_notes,
             calendar::autorecord::set_ignored_apps,
             calendar::autorecord::set_calendar_record_mode,
         ])

@@ -6,6 +6,7 @@ import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { CaptureSettings } from '@/components/Calendar/CaptureSettings';
 import {
   Select,
   SelectContent,
@@ -280,6 +281,8 @@ export function CalendarSettings() {
           </SelectContent>
         </Select>
       </div>
+
+      <CaptureSettings />
 
       <div className="p-4 border rounded-lg space-y-2">
         <div className="font-medium">Never treat these apps as a meeting</div>
