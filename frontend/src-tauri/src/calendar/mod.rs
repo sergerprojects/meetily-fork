@@ -515,6 +515,28 @@ fn write_event_to_metadata(folder: &Path, event_json: &Value) -> anyhow::Result<
     Ok(())
 }
 
+/// Apply the live "Speaker N = person" choices (speaker_names.json in the recording folder) to the saved transcript.
+async fn apply_speaker_names(pool: &SqlitePool, meeting_id: &str, folder: Option<&Path>) {
+    let Some(folder) = folder else { return };
+    let Ok(raw) = std::fs::read_to_string(folder.join("speaker_names.json")) else { return };
+    let Ok(names) = serde_json::from_str::<std::collections::HashMap<String, String>>(&raw) else { return };
+    for (label, name) in names {
+        let name = name.trim();
+        if name.is_empty() || name == label || !label.starts_with("Speaker ") {
+            continue;
+        }
+        if let Err(e) = sqlx::query("UPDATE transcripts SET speaker = ? WHERE meeting_id = ? AND speaker = ?")
+            .bind(name)
+            .bind(meeting_id)
+            .bind(&label)
+            .execute(pool)
+            .await
+        {
+            log::warn!("Calendar: failed to apply speaker name for {}: {}", meeting_id, e);
+        }
+    }
+}
+
 /// Called after a meeting row is created. Attaches the prompt-started event
 /// (if recent) or the best window match. Renames the meeting if its title is
 /// still the auto default. Returns the new title when renamed.
@@ -525,6 +547,7 @@ pub async fn attach_to_saved_meeting(
     meeting_title: &str,
     folder_path: Option<&str>,
 ) -> Option<String> {
+    apply_speaker_names(pool, meeting_id, folder_path.map(Path::new)).await;
     let forced = STATE.attach_running.lock().await.take();
     let pending = STATE.pending.lock().await.take();
     if forced.is_none() && pending.is_none() && client().await.is_none() {

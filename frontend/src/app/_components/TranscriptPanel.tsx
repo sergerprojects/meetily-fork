@@ -14,7 +14,7 @@ import { usePermissionCheck } from '@/hooks/usePermissionCheck';
 import { ModalType } from '@/hooks/useModalState';
 import { useIsLinux } from '@/hooks/usePlatform';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
-import { getCurrentOtherName, getCurrentEvent, getCalendarAgenda, attachRecordingToEvent, saveLiveNotes, CalendarEvent } from '@/lib/calendar';
+import { getCurrentOtherName, getCurrentEvent, getCalendarAgenda, attachRecordingToEvent, saveLiveNotes, saveSpeakerNames, CalendarEvent } from '@/lib/calendar';
 
 /**
  * TranscriptPanel Component
@@ -70,6 +70,7 @@ export function TranscriptPanel({
   const [choices, setChoices] = useState<CalendarEvent[]>([]);
   const [notes, setNotes] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const { isCollapsed: sidebarCollapsed } = useSidebar();
   const [wasRecording, setWasRecording] = useState(false);
 
@@ -77,6 +78,7 @@ export function TranscriptPanel({
     if (isRecording && !wasRecording) {
       setNotes('');
       setShowTranscript(false);
+      setSpeakerNames({});
     }
     setWasRecording(isRecording);
   }, [isRecording, wasRecording]);
@@ -110,9 +112,20 @@ export function TranscriptPanel({
     return () => clearTimeout(t);
   }, [notes, isRecording]);
 
+  // Keep the "Speaker N = person" choices with the recording.
+  useEffect(() => {
+    if (!isRecording || Object.keys(speakerNames).length === 0) return;
+    saveSpeakerNames(speakerNames).catch(() => {});
+  }, [speakerNames, isRecording]);
+
   const isDefaultTitle = /^(Meeting \d|\+ New Call)/.test(meetingTitle || '');
   const displayTitle = event && isDefaultTitle ? event.summary : meetingTitle;
   const others = (event?.attendees ?? []).filter(a => !a.is_self);
+  // Voices the live labeler has told apart so far ("Speaker 1", "Speaker 2", ...).
+  const speakerLabels = useMemo(
+    () => Array.from(new Set(transcripts.map(t => t.speaker || '').filter(s => /^Speaker \d+$/.test(s)))).sort((a, b) => Number(a.slice(8)) - Number(b.slice(8))),
+    [transcripts]
+  );
   const showLiveView = isRecording || notes.trim().length > 0;
 
   // Convert transcripts to segments for virtualized view
@@ -123,9 +136,9 @@ export function TranscriptPanel({
       endTime: t.audio_end_time,
       text: t.text,
       confidence: t.confidence,
-      speaker: otherName && t.speaker === 'Others' ? otherName : t.speaker,
+      speaker: otherName && t.speaker === 'Others' ? otherName : (t.speaker && speakerNames[t.speaker]) || t.speaker,
     })),
-    [transcripts, otherName]
+    [transcripts, otherName, speakerNames]
   );
 
   return (
@@ -267,6 +280,29 @@ export function TranscriptPanel({
                       </button>
                     </div>
                   </div>
+                  {speakerLabels.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-5 py-2 text-xs text-gray-500">
+                      <span className="font-medium text-gray-600">Who's who</span>
+                      {speakerLabels.map(label => (
+                        <label key={label} className="inline-flex items-center gap-1.5">
+                          <span>{label}</span>
+                          <select
+                            value={speakerNames[label] ?? ''}
+                            onChange={e => setSpeakerNames(m => ({ ...m, [label]: e.target.value }))}
+                            className="max-w-[160px] rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-800"
+                            aria-label={`Who is ${label}`}
+                          >
+                            <option value="">Not sure</option>
+                            {others.map(a => (
+                              <option key={a.email} value={a.name}>
+                                {a.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex-1 overflow-y-auto px-5 py-3">
                     <VirtualizedTranscriptView
                       segments={segments}

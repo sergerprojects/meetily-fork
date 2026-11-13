@@ -97,6 +97,8 @@ fn finalize_recording_start() {
     IS_RECORDING.store(true, Ordering::SeqCst);
     MIC_FALLBACK_FAILED_ATTEMPTS.store(0, Ordering::SeqCst); // fresh mic-recovery budget per session
     reset_speech_detected_flag(); // reset speech-detected emit latch for the new session
+    // Live "who is speaking" helper (optional; stays off if not set up).
+    tokio::spawn(super::live_speakers::start());
 }
 
 // Global recording manager and transcription task to keep them alive during recording
@@ -1014,6 +1016,8 @@ pub async fn stop_recording<R: Runtime>(
         }),
     );
 
+    super::live_speakers::stop().await;
+
     // Perform final cleanup with the manager if available
     let (meeting_folder, meeting_name) = if let Some(mut manager) = manager_for_cleanup {
         info!("🧹 Performing final cleanup and saving recording data");
@@ -1219,6 +1223,21 @@ pub async fn get_recording_state() -> serde_json::Value {
             "current_pause_duration": null
         })
     }
+}
+
+/// Who each "Speaker N" is (chosen in the live view): kept beside the recording as
+/// `speaker_names.json` and applied to the saved transcript when the meeting is saved.
+#[tauri::command]
+pub async fn save_speaker_names(names: std::collections::HashMap<String, String>) -> Result<(), String> {
+    let folder = {
+        let guard = RECORDING_MANAGER.lock().unwrap();
+        guard.as_ref().and_then(|m| m.get_meeting_folder())
+    };
+    let Some(folder) = folder else { return Err("no recording in progress".to_string()) };
+    let json = serde_json::to_string_pretty(&names).map_err(|e| e.to_string())?;
+    let tmp = folder.join(".speaker_names.json.tmp");
+    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, folder.join("speaker_names.json")).map_err(|e| e.to_string())
 }
 
 /// Free-form notes typed during the recording, kept next to the transcript as

@@ -220,3 +220,8 @@ export async function setCalendarSource(source: 'claude' | 'google'): Promise<Ca
 export async function attachRecordingToEvent(event: CalendarEvent): Promise<void> {
   await invoke('calendar_attach_to_running', { event });
 }
+
+/** Remember which person each "Speaker N" is (saved with the recording). */
+export async function saveSpeakerNames(names: Record<string, string>): Promise<void> {
+  await invoke('save_speaker_names', { names });
+}

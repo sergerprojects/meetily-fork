@@ -8,6 +8,7 @@ const QUICK_ASKS: { label: string; question: string }[] = [
   { label: 'What did I miss', question: 'What did I miss? Summarize the last few minutes in 3 bullets.' },
   { label: 'Make me sound smart', question: 'Give me one sharp, well-grounded comment I could make right now, based on what has been said. One or two sentences.' },
   { label: 'Suggest questions', question: 'Suggest 3 good questions I could ask next, based on what has been said.' },
+  { label: "Who's who", question: "Match each 'Speaker N' to an invitee using only what has been said (names used, who is addressed, roles). For each speaker give the name and the evidence in a few words, or 'unsure'. Do not guess." },
   { label: 'Action items so far', question: 'List the action items and commitments mentioned so far, with who owns each.' },
 ];
 

@@ -71,6 +71,10 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 
 ## 4. Speaker names (optional)
 
+**Live (recommended, no audio saved):** run `bash scripts/setup-speakers.sh` once. During recordings the call side is split into Speaker 1, 2, ... as people talk (audio is analysed in memory and discarded). In the live view open the transcript panel and pick who each speaker is from the invite list; the choice is saved with the meeting. Python 3 and a ~26 MB voice model are the only requirements.
+
+**After the fact (needs saved audio):**
+
 The app labels lines "You" (microphone) and "Others" (everyone else). `tools/diarize_meeting.py` goes further on-device: it separates the "Others" audio into Speaker 1, Speaker 2, ... by voice. It needs the meeting's `audio.mp4`. Audio is **not** saved by default; this step only works if the person turns on Settings -> Recording -> "Save Audio Recordings" (their choice: it keeps recordings of other people's voices on disk).
 
 ```bash

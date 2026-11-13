@@ -10,7 +10,8 @@
 > - A Home screen: today's and tomorrow's calendar ("Coming up", with Start now) and your meetings grouped by day with who was in them
 > - The other person's name instead of "Others" on calendar 1:1s, live and when saved
 > - Menu-bar countdown to your next meeting, and a list of apps whose microphone use never counts as a meeting
-> - Optional on-device voice separation (Speaker 1, 2, ...) for group calls: `tools/diarize_meeting.py`
+> - Optional live voice separation for group calls (Speaker 1, 2, ... as people talk, audio analysed in memory and never saved; name them from the invite in the live view): `scripts/setup-speakers.sh`
+> - Optional after-the-fact voice separation of saved audio: `tools/diarize_meeting.py`
 > - Launch at login (macOS)
 > - Audio is not kept by default: only transcripts are saved unless you turn on "Save Audio Recordings"
 > - Upstream auto-update disabled (it would overwrite this fork)

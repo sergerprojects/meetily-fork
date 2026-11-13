@@ -152,10 +152,16 @@ pub fn start_transcription_task<R: Runtime>(
 
                             let chunk_timestamp = chunk.timestamp;
                             let chunk_duration = chunk.data.len() as f64 / chunk.sample_rate as f64;
-                            let chunk_speaker = match chunk.device_type {
-                                RecordingDeviceType::Microphone => "You",
-                                RecordingDeviceType::System => "Others",
+                            let mut chunk_speaker = match chunk.device_type {
+                                RecordingDeviceType::Microphone => "You".to_string(),
+                                RecordingDeviceType::System => "Others".to_string(),
                             };
+                            // Call audio: tell voices apart (in memory only; off unless set up).
+                            if matches!(chunk.device_type, RecordingDeviceType::System) && crate::audio::live_speakers::enabled() {
+                                if let Some(label) = crate::audio::live_speakers::label(&chunk.data, chunk.sample_rate).await {
+                                    chunk_speaker = label;
+                                }
+                            }
 
                             // Transcribe with provider-agnostic approach
                             match transcribe_chunk_with_provider(
@@ -222,7 +228,7 @@ pub fn start_transcription_task<R: Runtime>(
                                             audio_start_time,
                                             audio_end_time,
                                             duration: chunk_duration,
-                                            speaker: Some(chunk_speaker.to_string()),
+                                            speaker: Some(chunk_speaker.clone()),
                                         };
 
                                         crate::calendar::silence::note_speech();
