@@ -5,6 +5,7 @@ export interface CaptureStatus {
   screen_recording: boolean;
   names: boolean;
   snapshots: boolean;
+  own_shares: boolean;
 }
 
 export interface MeetingImage {
@@ -53,3 +54,5 @@ export const relabelSpeaker = (meetingId: string, from: string, to: string) =>
 /** Captures a call app's window and reads its text; resolves to a one-line report. */
 export const testWindowCapture = (app: 'zoom' | 'teams' | 'chrome') =>
   invoke<string>('capture_window_test', { app });
+
+export const setCaptureOwnShares = (enabled: boolean) => invoke<void>('set_capture_own_shares', { enabled });

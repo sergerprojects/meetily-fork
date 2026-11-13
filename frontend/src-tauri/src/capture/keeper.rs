@@ -37,6 +37,11 @@ impl Keeper {
         Self { rules, ..Default::default() }
     }
 
+    /// Count pictures already saved (the app restarted mid-meeting).
+    pub fn set_kept(&mut self, n: usize) {
+        self.kept = n;
+    }
+
     pub fn kept(&self) -> usize {
         self.kept
     }

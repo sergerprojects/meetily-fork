@@ -13,6 +13,7 @@ import {
   setCaptureNames,
   probeCallApp,
   setCaptureSnapshots,
+  setCaptureOwnShares,
   testWindowCapture,
 } from '@/lib/capture';
 
@@ -70,6 +71,15 @@ export function CaptureSettings() {
       await setCaptureNames(on);
       setStatus(s => (s ? { ...s, names: on } : s));
       if (on && status && !status.accessibility) await setUpAccessibility();
+    } catch (e) {
+      toast.error(`Could not change this setting: ${e}`);
+    }
+  };
+
+  const toggleOwnShares = async (on: boolean) => {
+    try {
+      await setCaptureOwnShares(on);
+      setStatus(s => (s ? { ...s, own_shares: on } : s));
     } catch (e) {
       toast.error(`Could not change this setting: ${e}`);
     }
@@ -138,6 +148,10 @@ export function CaptureSettings() {
           <div className="space-y-2">
             <PermissionRow granted={status.screen_recording} label="Screen Recording" onSetUp={setUpScreen} />
             <PermissionRow granted={status.accessibility} label="Accessibility" onSetUp={setUpAccessibility} />
+            <div className="flex items-center justify-between gap-3 pt-1 text-sm text-gray-600">
+              <span>Also capture my own shared screen (to try it out alone)</span>
+              <Switch checked={status.own_shares} onCheckedChange={toggleOwnShares} />
+            </div>
           </div>
         )}
       </div>

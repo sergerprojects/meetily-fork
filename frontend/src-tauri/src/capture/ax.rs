@@ -116,7 +116,7 @@ impl CallApp {
 }
 
 #[cfg(target_os = "macos")]
-pub use mac::{find_pid, snapshot_app, Limits};
+pub use mac::{find_pid, snapshot_app, snapshot_windows, Limits};
 
 #[cfg(target_os = "macos")]
 mod mac {
@@ -387,6 +387,33 @@ mod mac {
             let mut count = 0;
             let tree = read(app.0, &attrs, 0, Instant::now(), &mut count, lim);
             (!tree.role.is_empty() || !tree.children.is_empty()).then_some(tree)
+        }
+    }
+
+    /// Just the app's windows (no menu bar), one tree per window. Much lighter than
+    /// `snapshot_app` for polling.
+    pub fn snapshot_windows(pid: i32, wake_browser: bool, lim: &Limits) -> Vec<Node> {
+        // SAFETY: standard AX calls on elements we create and release.
+        unsafe {
+            let app = Cf(AXUIElementCreateApplication(pid));
+            if app.0.is_null() {
+                return vec![];
+            }
+            AXUIElementSetMessagingTimeout(app.0, 1.0);
+            if wake_browser {
+                for name in ["AXManualAccessibility", "AXEnhancedUserInterface"] {
+                    let n = cfstr(name);
+                    AXUIElementSetAttributeValue(app.0, n.0, kCFBooleanTrue);
+                }
+            }
+            let attrs = Attrs::new();
+            let Some(list) = copy_attr(app.0, &cfstr("AXWindows")) else { return vec![] };
+            let started = Instant::now();
+            let mut count = 0;
+            array_items(&list)
+                .into_iter()
+                .map(|w| read(w, &attrs, 0, started, &mut count, lim))
+                .collect()
         }
     }
 }

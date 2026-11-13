@@ -574,6 +574,7 @@ pub fn run() {
             // Mic-activity "joined a call" watcher for auto-record (macOS only)
             calendar::autorecord::start(_app.handle().clone());
             calendar::silence::start(_app.handle().clone());
+            capture::snapshots::start(_app.handle().clone());
 
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
@@ -896,6 +897,7 @@ pub fn run() {
             capture::capture_request_screen,
             capture::set_capture_names,
             capture::set_capture_snapshots,
+            capture::set_capture_own_shares,
             capture::files::list_meeting_images,
             capture::files::read_meeting_image,
             capture::files::delete_meeting_image,

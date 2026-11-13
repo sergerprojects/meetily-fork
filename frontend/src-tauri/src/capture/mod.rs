@@ -7,7 +7,9 @@ pub mod edit;
 pub mod files;
 pub mod frame;
 pub mod keeper;
+pub mod meet;
 pub mod screen;
+pub mod snapshots;
 pub mod store;
 pub mod perms;
 
@@ -17,6 +19,7 @@ use tauri_plugin_store::StoreExt;
 
 const NAMES_KEY: &str = "capture_names";
 const SNAPSHOTS_KEY: &str = "capture_snapshots";
+const OWN_SHARES_KEY: &str = "capture_own_shares";
 
 fn store_bool(app: &AppHandle<Wry>, key: &str, default: bool) -> bool {
     app.store(crate::calendar::ical::STORE_FILE)
@@ -44,8 +47,14 @@ pub fn snapshots_enabled(app: &AppHandle<Wry>) -> bool {
     store_bool(app, SNAPSHOTS_KEY, false)
 }
 
+/// Also capture the screen you share yourself (for trying snapshots alone).
+pub fn own_shares_enabled(app: &AppHandle<Wry>) -> bool {
+    store_bool(app, OWN_SHARES_KEY, false)
+}
+
 #[derive(Serialize)]
 pub struct CaptureStatus {
+    pub own_shares: bool,
     pub accessibility: bool,
     pub screen_recording: bool,
     pub names: bool,
@@ -55,6 +64,7 @@ pub struct CaptureStatus {
 #[tauri::command]
 pub async fn capture_status(app: AppHandle<Wry>) -> CaptureStatus {
     CaptureStatus {
+        own_shares: own_shares_enabled(&app),
         accessibility: perms::accessibility_granted(),
         screen_recording: perms::screen_granted(),
         names: names_enabled(&app),
@@ -165,4 +175,9 @@ async fn run_capture_test(app: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn capture_window_test(_app: String) -> Result<String, String> {
     Err("only on macOS".into())
+}
+
+#[tauri::command]
+pub async fn set_capture_own_shares(app: AppHandle<Wry>, enabled: bool) -> Result<(), String> {
+    set_store_bool(&app, OWN_SHARES_KEY, enabled)
 }
