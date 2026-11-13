@@ -71,7 +71,7 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 
 ## 4. Speaker names (optional)
 
-The app labels lines "You" (microphone) and "Others" (everyone else). `tools/diarize_meeting.py` goes further on-device: it separates the "Others" audio into Speaker 1, Speaker 2, ... by voice. It needs the meeting's `audio.mp4`, so Settings -> Recording -> save audio must be on.
+The app labels lines "You" (microphone) and "Others" (everyone else). `tools/diarize_meeting.py` goes further on-device: it separates the "Others" audio into Speaker 1, Speaker 2, ... by voice. It needs the meeting's `audio.mp4`. Audio is **not** saved by default; this step only works if the person turns on Settings -> Recording -> "Save Audio Recordings" (their choice: it keeps recordings of other people's voices on disk).
 
 ```bash
 python3 -m venv ~/.meetily/venv && ~/.meetily/venv/bin/pip install sherpa-onnx numpy

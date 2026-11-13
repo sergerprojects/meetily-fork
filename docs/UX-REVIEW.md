@@ -46,7 +46,7 @@ Dark mode is not supported. Color is used for status inconsistently (blue pill l
 - First-run should explain the one thing users must do: grant microphone and screen/system-audio access.
 
 ### 10. Names (the thing you asked about)
-Names appear only when a calendar meeting has exactly one other person. Group calls show "Others". Real names for groups need voice separation after the call (needs saved audio, so keep Settings → Recording "save audio" on) plus calendar names (needs the Google directory permission). Be explicit in the UI: show "Names appear after the meeting" on group calls, so the absence reads as intentional.
+Names appear only when a calendar meeting has exactly one other person. Group calls show "Others". Real names for groups need voice separation after the call (needs saved audio, which is off by default and opt-in under Settings → Recording) plus calendar names (needs the Google directory permission). Be explicit in the UI: show "Names appear after the meeting" on group calls, so the absence reads as intentional.
 
 ## Build order I would follow
 1. (done) Live note view, sidebar rebuild, version stamp.

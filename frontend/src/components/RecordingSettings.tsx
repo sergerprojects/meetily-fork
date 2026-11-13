@@ -24,7 +24,7 @@ interface RecordingSettingsProps {
 export function RecordingSettings({ onSave }: RecordingSettingsProps) {
   const [preferences, setPreferences] = useState<RecordingPreferences>({
     save_folder: '',
-    auto_save: true,
+    auto_save: false,
     file_format: 'mp4',
     preferred_mic_device: null,
     preferred_system_device: null
@@ -176,7 +176,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
         <div className="flex-1">
           <div className="font-medium">Save Audio Recordings</div>
           <div className="text-sm text-gray-600">
-            Automatically save audio files when recording stops
+            Off by default. When on, an audio file is kept with each recording; when off, only the transcript is saved and the audio is discarded as you go.
           </div>
         </div>
         <Switch

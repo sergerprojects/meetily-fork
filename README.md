@@ -12,6 +12,7 @@
 > - Menu-bar countdown to your next meeting, and a list of apps whose microphone use never counts as a meeting
 > - Optional on-device voice separation (Speaker 1, 2, ...) for group calls: `tools/diarize_meeting.py`
 > - Launch at login (macOS)
+> - Audio is not kept by default: only transcripts are saved unless you turn on "Save Audio Recordings"
 > - Upstream auto-update disabled (it would overwrite this fork)
 > - Upstream usage analytics permanently disabled: this fork contains no telemetry key and sends nothing
 >
