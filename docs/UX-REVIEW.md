@@ -73,3 +73,6 @@ Names appear only when a calendar meeting has exactly one other person. Group ca
 | Ask-anything chat over notes | not in the app (Chrisforce does it) |
 | Integrations (Slack, Notion, CRM) | not in the app (Chrisforce routes output) |
 | Sharing links | not built, by design |
+
+## Update (0.8.0)
+Done since this review: summary-toolbar left as is (built-in summaries are not used), sidebar grouped by day with times, keyboard shortcuts and a command palette, notes box with `/` templates and formatting, saved view shows your own notes, settings regrouped into five tabs. Still open: one navigation system (the collapsed rail remains), dark mode, transparent title bar and vibrancy.

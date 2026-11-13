@@ -30,3 +30,18 @@ Source: docs.granola.ai help center and Granola's Snapshots blog post, read thro
 1. Speaker names from Accessibility (names plus active speaker) matched to the system-audio timeline. Replaces most of the voice-clustering guesswork on group calls.
 2. Snapshots (Accessibility to detect the share, ScreenCaptureKit to capture that one window, Images stack and viewer, per-meeting off switch, OCR text for chat). Shares the same permission as step 1.
 3. Small ones: delete transcript chunk, Stop/Resume, sleep and scheduled-end auto-stop, floating live indicator, saved chat prompts.
+
+## Status in Graphite (0.8.0)
+
+| Granola feature | Graphite |
+| --- | --- |
+| Speaker names from the meeting app | Google Meet in Chrome (Accessibility). Zoom and Teams not yet read. The "who is speaking" marker in Meet's markup is unverified until a multi-person call is probed |
+| Snapshots of shared screens | Google Meet in Chrome, opt-in, text read on-device, Images strip and viewer |
+| Auto-stop on sleep / scheduled end | Built (sleep, calendar slot over and quiet, silence) |
+| Delete transcript chunk | Built (hover a saved line) |
+| Stop/Resume | Pause and resume already existed |
+| Transcript auto-delete | Not built (audio is not kept by default) |
+| Templates with `/` | Built in the live notes box |
+| Recipes | Editable quick questions for the chat |
+| Live indicator | Floating chip while Graphite is in the background |
+| Watermark / chat message about recording | Not built (outward-facing; consent stays with the user) |

@@ -31,7 +31,7 @@ It checks prerequisites (Xcode command line tools, Rust, Node, cmake), builds, b
 
 ## 2. Connect the person's calendar (optional, per person)
 
-The app picks a calendar source in this order: a pasted private iCal link, otherwise Google credentials from gcloud. Both feed the same code (`frontend/src-tauri/src/calendar/`). Settings → Recording shows which one is active and the next meetings.
+The app picks a calendar source in this order: a pasted private iCal link, otherwise Google credentials from gcloud. Both feed the same code (`frontend/src-tauri/src/calendar/`). Settings → Calendar shows which one is active and the next meetings.
 
 ### How it was bound for the original author (gcloud, worked)
 
@@ -66,7 +66,7 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 ## 3. Verify
 
 - Menu-bar icon lists today's and tomorrow's meetings (if a calendar is connected).
-- Settings → Recording shows the connected source, and "Launch at login" is on.
+- Settings → Calendar shows the connected source, and Settings → General shows "Launch at login" on.
 - "When I join a meeting" defaults to **Ask me**. Switch to **Record automatically** only if the person wants it and has the right to record their calls (company policy, other participants' consent).
 
 ## 4. Speaker names (optional)
@@ -84,6 +84,18 @@ python3 -m venv ~/.meetily/venv && ~/.meetily/venv/bin/pip install sherpa-onnx n
 ```
 
 Turning "Speaker 2" into a person's name is left to you: match against the calendar attendee list (`calendar_event` in the meeting's `metadata.json`) using what is said in the meeting ("thanks, Sam", self-introductions). Only apply a name when the dialogue says so; otherwise keep "Speaker N". Measured so far: separates you from one other voice well; with several similar voices it can merge or split people. Treat labels as best guesses.
+
+## 5. Permissions and signing (macOS)
+
+Graphite asks for these in Settings → Capture and during onboarding:
+
+- **Microphone** and **Audio capture** (call audio) for recording.
+- **Accessibility** to read participant names and who is speaking from Google Meet in Chrome, and to notice screen shares.
+- **Screen Recording** only if "Snapshots of shared screens" is turned on.
+
+macOS ties these permissions to the app's code signature. An ad-hoc signed build gets a new identity on every rebuild, so macOS forgets the grants after each install. Run `bash scripts/make-signing-cert.sh` once (creates a local self-signed "Graphite Local" identity in your login keychain, never leaves the Mac); `scripts/install-mac.sh` then signs with it automatically and the grants survive reinstalls.
+
+Snapshot pictures and the `active_speakers.json` timeline are saved inside each meeting's folder under `~/Movies/meetily-recordings/`. Snapshots keep pictures of other people's shared content: tell the person, and get consent where needed.
 
 ## Notes
 

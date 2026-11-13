@@ -12,6 +12,13 @@
 > - Menu-bar countdown to your next meeting, and a list of apps whose microphone use never counts as a meeting
 > - Optional live voice separation for group calls (Speaker 1, 2, ... as people talk, audio analysed in memory and never saved; name them from the invite in the live view): `scripts/setup-speakers.sh`
 > - Optional after-the-fact voice separation of saved audio: `tools/diarize_meeting.py`
+> - Speaker names from the call app (Google Meet in Chrome): who was speaking is read from the page through macOS Accessibility and put on the transcript (needs the Accessibility permission; nothing is recorded or sent)
+> - Snapshots of shared screens (Google Meet in Chrome, opt-in): pictures of what other people share, saved with the meeting on this Mac, with the text read off them on-device; an "Images" strip under the notes with a full-size viewer
+> - Notes box with `/` templates, list continuation and bold/italics; chat quick-questions you can edit; a command palette (⌘K) and shortcuts
+> - A small floating recording chip (time, Open, Stop) while Graphite is in the background
+> - Auto-stop when the Mac sleeps, when a calendar slot is over and the call is quiet, or after silence
+> - Edit saved transcripts: delete a line, rename a speaker
+> - Settings reorganised into Recording, Calendar, Capture, Transcription and General; built-in summaries, analytics and the update check are no longer in the interface
 > - Launch at login (macOS)
 > - Audio is not kept by default: only transcripts are saved unless you turn on "Save Audio Recordings"
 > - Upstream auto-update disabled (it would overwrite this fork)
