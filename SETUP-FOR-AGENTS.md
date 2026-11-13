@@ -1,53 +1,74 @@
 # Setup guide for an AI agent (this fork of Meetily)
 
-Goal: get this local meeting recorder running on the user's Mac and connected to **their own** Google Calendar. Everything stays on the machine: audio, on-device transcription (Parakeet), calendar link. No cloud project, no OAuth app, no server.
+You are an AI agent helping a person set up a local meeting recorder on their own computer. This is a shared fork, not a managed product: nobody maintains it for you. Adapt freely, and tell the person what you changed.
 
-What this fork adds over upstream Meetily: "You / Others" speaker labels, Google Calendar titles and attendees, a menu-bar list of today's meetings, a prompt (or auto-record) when the user joins a Zoom / Teams / Meet / Slack call, launch at login, and the upstream updater turned off.
+Everything stays on the machine: audio, on-device transcription (Parakeet), calendar access. No server.
 
-Requirements: Apple Silicon Mac, macOS 14+.
+## What this fork adds over upstream Meetily
+
+- "You / Others" speaker labels (mic vs system audio energy)
+- Calendar awareness: meeting titles and attendees on recordings, a menu-bar list of today's/tomorrow's meetings, a prompt (or auto-record) when you join a Zoom / Teams / Meet / Slack call
+- Launch at login (starts hidden in the menu bar)
+- Upstream updater turned off (it would overwrite this fork)
+
+Recording and transcription work with no calendar at all. The calendar is a convenience; if you cannot connect it, the app still records and the person can name meetings by hand.
 
 ## 1. Install
+
+**macOS (Apple Silicon, tested):**
 
 ```bash
 bash scripts/install-mac.sh
 ```
 
-The script checks prerequisites and tells you the exact install command for anything missing (Xcode command line tools, Rust via rustup, Node, cmake). Install those with the user's approval, then re-run. First build takes 10-20 minutes. It quits any running Meetily, backs it up to `~/meetily-backup/`, installs to `/Applications/meetily.app`, clears quarantine (the build is unsigned) and launches it.
+It checks prerequisites (Xcode command line tools, Rust, Node, cmake), builds, backs up any existing install to `~/meetily-backup/`, installs to `/Applications/meetily.app`, clears quarantine (unsigned build) and launches. First build: 10-20 minutes. The final "A public key has been found, but no private key" message is expected and harmless.
 
-If the build fails, read the error rather than retrying. Known traps are already handled in the script (`CARGO_PROFILE_RELEASE_STRIP=none`, `CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON`, the `llama-helper` sidecar). The final "A public key has been found, but no private key" message is expected and harmless.
+**Windows / Intel Mac / Linux (untested):** upstream Meetily supports Windows, and most of this fork's code is not platform-specific, but nobody has built or run it there. Read `docs/BUILDING.md` and `frontend/build-gpu.*`, build with the Tauri CLI, and fix what breaks. Known Mac-only pieces in this fork:
+- `frontend/src-tauri/src/calendar/mic_activity.rs`: "you joined a call" detection reads CoreAudio. On other OSes `sample()` returns `None`, so join prompts are off (calendar-time prompts still work). Implementing it needs per-process audio-session enumeration (WASAPI on Windows).
+- `scripts/install-mac.sh`, the `llama-helper` sidecar naming (`llama-helper-<target-triple>`), and Mac login-item handling.
 
-## 2. Permissions (the user must click these)
+**Permissions (macOS):** allow Microphone, Screen & System Audio Recording, and Notifications when asked. System audio is how the other side of a call is captured. The first recording downloads the speech model (a few hundred MB).
 
-On first run macOS asks for **Microphone** and **Screen & System Audio Recording** access, and for **Notifications**. Tell the user to allow all three. System audio is how the other side of a call is captured. If a prompt was dismissed: System Settings → Privacy & Security.
+## 2. Connect the person's calendar (optional, per person)
 
-First recording also downloads the speech model (a few hundred MB). Let it finish.
+The app picks a calendar source in this order: a pasted private iCal link, otherwise Google credentials from gcloud. Both feed the same code (`frontend/src-tauri/src/calendar/`). Settings → Recording shows which one is active and the next meetings.
 
-## 3. Connect the user's Google Calendar
+### How it was bound for the original author (gcloud, worked)
 
-Ask the user to do this themselves (it is their credential; do not read it from their browser or Google account):
+The author's credentials file uses gcloud's own sign-in client with a personal Google Cloud project (name like `ehc-<username>-<number>`) as the quota project; such projects appear to be provisioned per employee, so check `gcloud projects list`. If the person has one, no shared project is needed. These are the standard commands for that setup (the exact original commands were not recorded):
 
-1. Google Calendar (web) → Settings (gear) → click their calendar in the left list → **Integrate calendar**.
-2. Copy **Secret address in iCal format**.
-3. In Meetily: Settings → Recording → **Google Calendar** → paste into the field → **Connect**.
+```bash
+gcloud auth application-default login \
+  --scopes=https://www.googleapis.com/auth/calendar.readonly,openid,https://www.googleapis.com/auth/userinfo.email
+gcloud auth application-default set-quota-project <their-project-id>
+gcloud services enable calendar-json.googleapis.com --project <their-project-id>   # if not already on
+```
 
-Meetily downloads the feed, and only saves the link if it parses. Success shows "Connected via private iCal link" and the next three meetings.
+That writes `application_default_credentials.json` (macOS/Linux `~/.config/gcloud/`, Windows `%APPDATA%\gcloud\`, or `$CLOUDSDK_CONFIG`). Restart Meetily; Settings → Recording should say "Connected via Google sign-in (gcloud)". Read-only calendar scope only.
 
-Rules for you, the agent:
-- Treat the link as a password. Never write it to a file in a repo, a log, a chat summary or a commit. The app stores it locally on the user's Mac only.
-- If Connect fails with HTTP 403/404 the link was reset or the company admin disabled secret iCal addresses. Tell the user; do not work around it.
-- Google updates this feed slowly. A meeting added or moved in the last few hours may be missing. Meetings booked a day or more ahead are fine. The mic-based prompt still catches calls the feed missed.
+Things that can go wrong: no personal project or no permission to enable the Calendar API; the company blocks the calendar scope for gcloud's client; `gcloud` not installed. If so, try a different source below.
 
-## 4. Verify
+### Other sources you can try or add
 
-- Menu-bar icon shows today's and tomorrow's meetings.
-- Settings → Recording shows "Connected via private iCal link".
-- Launch at login is on (Settings → Recording), file `~/Library/LaunchAgents/meetily.plist`.
-- "When I join a meeting" defaults to **Ask me**. Switch to **Record automatically** only if the user wants it and has the right to record their calls (company policy, other participants' consent).
+- **Private iCal link**: Google Calendar → Settings → your calendar → Integrate calendar → "Secret address in iCal format", pasted into Settings → Recording. It is built and tested against fixtures. It did **not** work for the author because the company admin hides that address. Never use the "Public address" instead: it requires making the whole calendar public.
+- **macOS Calendar app (EventKit)**: if the person's Google account is already in Calendar.app this could read it with no Google sign-in at all. Not built; untested whether Meet links come through. A command-line probe cannot trigger the permission prompt, so it must run inside the app bundle with `NSCalendarsFullAccessUsageDescription` in its Info.plist.
+- **Anything else** (Outlook/Graph, CalDAV, a file your own scheduled job writes): add a variant to `Source` in `calendar/mod.rs`. A source only has to return events as Google-Calendar-API-shaped JSON from `list_events(min, max)`; `parse_event` does the rest. `calendar/ical.rs` is a worked example.
+
+### Rules
+
+- Treat any calendar link or credential as a password. Never put it in a repo, log, chat summary or commit.
+- Ask the person before changing their account, enabling APIs or running `gcloud auth`. Their browser sign-in is theirs to do.
+- Company admin settings may block a path. Report the block; do not work around it.
+
+## 3. Verify
+
+- Menu-bar icon lists today's and tomorrow's meetings (if a calendar is connected).
+- Settings → Recording shows the connected source, and "Launch at login" is on.
+- "When I join a meeting" defaults to **Ask me**. Switch to **Record automatically** only if the person wants it and has the right to record their calls (company policy, other participants' consent).
 
 ## Notes
 
 - Recordings: `~/Movies/meetily-recordings/`. Database: `~/Library/Application Support/com.meetily.ai/meeting_minutes.sqlite` (SQLite WAL: copy with `sqlite3 ... ".backup"`, never `cp`).
-- Summaries: leave Meetily's built-in summary and its API-key providers alone unless the user's company has approved sending transcripts to that provider.
-- The app and the original Meetily share a bundle id, so only one can be installed.
-- Code map for the fork's additions: `frontend/src-tauri/src/calendar/` (`ical.rs`, `google.rs`, `poller.rs`, `autorecord.rs`, `mic_activity.rs`), speaker labels in `frontend/src-tauri/src/audio/pipeline.rs`.
-- Optional, advanced: if the user has `gcloud` application-default credentials with calendar scope and no iCal link is set, the app falls back to those.
+- Leave Meetily's built-in summary and its API-key providers alone unless the person's company has approved sending transcripts to that provider.
+- This app shares a bundle id with upstream Meetily, so only one can be installed.
+- Code map: calendar in `frontend/src-tauri/src/calendar/` (`google.rs`, `ical.rs`, `poller.rs`, `autorecord.rs`, `mic_activity.rs`); speaker labels in `frontend/src-tauri/src/audio/pipeline.rs`; launch at login in `lib.rs` (`tauri-plugin-autostart`).

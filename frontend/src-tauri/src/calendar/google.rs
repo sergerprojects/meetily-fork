@@ -46,7 +46,15 @@ impl std::fmt::Debug for AdcCredentials {
 }
 
 pub fn adc_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".config/gcloud/application_default_credentials.json"))
+    const FILE: &str = "application_default_credentials.json";
+    if let Some(dir) = std::env::var_os("CLOUDSDK_CONFIG") {
+        return Some(PathBuf::from(dir).join(FILE));
+    }
+    #[cfg(windows)]
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        return Some(PathBuf::from(appdata).join("gcloud").join(FILE));
+    }
+    dirs::home_dir().map(|h| h.join(".config/gcloud").join(FILE))
 }
 
 impl AdcCredentials {
