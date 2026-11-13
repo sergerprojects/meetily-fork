@@ -7,6 +7,7 @@ import { ChevronUp, Copy, GlobeIcon, Minus } from 'lucide-react';
 import { MeetingHeader } from '@/components/Live/MeetingHeader';
 import { LiveChat } from '@/components/Live/LiveChat';
 import { ImageStrip } from '@/components/Images/ImageStrip';
+import { NotesBox } from '@/components/Live/NotesBox';
 import { invoke } from '@tauri-apps/api/core';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { useTranscripts } from '@/contexts/TranscriptContext';
@@ -247,14 +248,7 @@ export function TranscriptPanel({
           </div>
           <div className="flex justify-center px-4 pt-4 pb-48">
             <div className="w-2/3 max-w-[750px]">
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Write notes. The transcript is being captured in the background."
-                className="min-h-[55vh] w-full resize-none bg-transparent text-[15px] leading-7 text-gray-900 outline-none placeholder:text-gray-400"
-                aria-label="Meeting notes"
-                autoFocus
-              />
+              <NotesBox value={notes} onChange={setNotes} />
               <ImageStrip folder={liveFolder} live />
             </div>
           </div>
