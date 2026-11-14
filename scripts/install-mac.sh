@@ -43,11 +43,11 @@ APP="$ROOT/target/release/bundle/macos/Graphite.app"
 
 echo "==> 4/4 install to /Applications"
 osascript -e 'tell application "Graphite" to quit' >/dev/null 2>&1 || true
-for _ in $(seq 1 15); do pgrep -x meetily >/dev/null || break; sleep 1; done
+for _ in $(seq 1 15); do pgrep -x graphite >/dev/null || break; sleep 1; done
 if [ -d /Applications/Graphite.app ]; then
-  mkdir -p "$HOME/meetily-backup"
-  rm -rf "$HOME/meetily-backup/meetily-previous.app"
-  cp -R /Applications/Graphite.app "$HOME/meetily-backup/meetily-previous.app"
+  mkdir -p "$HOME/graphite-backup"
+  rm -rf "$HOME/graphite-backup/graphite-previous.app"
+  cp -R /Applications/Graphite.app "$HOME/graphite-backup/graphite-previous.app"
   rm -rf /Applications/Graphite.app
 fi
 cp -R "$APP" /Applications/Graphite.app

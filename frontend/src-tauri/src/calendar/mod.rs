@@ -247,7 +247,7 @@ pub(crate) async fn resolve_attendee_names(events: &[CalendarEvent]) {
 const WEEK_EXTRA_DAYS: i64 = 6;
 
 fn cache_path() -> Option<std::path::PathBuf> {
-    dirs::home_dir().map(|h| h.join(".meetily").join("calendar-cache.json"))
+    dirs::home_dir().map(|h| h.join(".graphite").join("calendar-cache.json"))
 }
 
 /// Last good event list from disk (so Home is not empty while the first refresh runs).
@@ -514,7 +514,7 @@ pub fn parse_event(raw: &Value) -> Option<CalendarEvent> {
     })
 }
 
-/// Best event for a recording window (same rule as import-meetily.py
+/// Best event for a recording window (same rule as import-graphite.py
 /// match_event): overlap >= 25% of the recording or of the event; prefer
 /// larger overlap, then events with attendees, then shorter events.
 pub fn best_match(

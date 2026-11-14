@@ -1,7 +1,7 @@
 //! Real names for attendees whose calendar entry has only an email address.
 //!
 //! Sources, in order:
-//! 1. `~/.meetily/people.json` — `{"email": "Full Name"}`; you can edit it by hand and
+//! 1. `~/.graphite/people.json` — `{"email": "Full Name"}`; you can edit it by hand and
 //!    it is also where looked-up names are cached.
 //! 2. Google Workspace directory (People API `searchDirectoryPeople`), when the
 //!    gcloud credentials include the `directory.readonly` scope. One lookup per
@@ -18,9 +18,9 @@ static CACHE: Lazy<RwLock<HashMap<String, String>>> = Lazy::new(|| RwLock::new(l
 static TRIED: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
 pub fn people_path() -> Option<PathBuf> {
-    std::env::var_os("MEETILY_PEOPLE_FILE")
+    std::env::var_os("GRAPHITE_PEOPLE_FILE")
         .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|h| h.join(".meetily").join("people.json")))
+        .or_else(|| dirs::home_dir().map(|h| h.join(".graphite").join("people.json")))
 }
 
 fn load_file() -> HashMap<String, String> {

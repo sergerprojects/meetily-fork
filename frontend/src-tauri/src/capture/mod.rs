@@ -111,7 +111,7 @@ pub async fn capture_ax_probe(app: String) -> Result<String, String> {
         let pid = ax::find_pid(which).ok_or_else(|| format!("{app} is not running"))?;
         let tree = ax::snapshot_app(pid, which == ax::CallApp::Chrome, &ax::Limits::probe())
             .ok_or("could not read the app's windows")?;
-        let dir = dirs::data_dir().ok_or("no data dir")?.join("com.meetily.ai").join("ax-probes");
+        let dir = dirs::data_dir().ok_or("no data dir")?.join("com.graphite.ai").join("ax-probes");
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let file = dir.join(format!("{}-{}.txt", app, chrono::Local::now().format("%Y%m%d-%H%M%S")));
         let body = format!("{} nodes\n\n{}", tree.count(), tree.dump());
@@ -156,7 +156,7 @@ async fn run_capture_test(app: String) -> Result<String, String> {
         .ok_or("no visible window to capture")?;
     let scale = 2.0;
     let frame = screen::capture_window(win.id, (win.frame[2] * scale) as usize, (win.frame[3] * scale) as usize).await?;
-    let dir = dirs::data_dir().ok_or("no data dir")?.join("com.meetily.ai").join("ax-probes");
+    let dir = dirs::data_dir().ok_or("no data dir")?.join("com.graphite.ai").join("ax-probes");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let file = dir.join(format!("{}-capture-{}.png", app, chrono::Local::now().format("%Y%m%d-%H%M%S")));
     std::fs::write(&file, frame.to_png()?).map_err(|e| e.to_string())?;

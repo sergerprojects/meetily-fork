@@ -1,9 +1,9 @@
 {
     "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName": "Graphite",
-    "mainBinaryName": "meetily",
-    "version": "0.8.1",
-    "identifier": "com.meetily.ai",
+    "mainBinaryName": "graphite",
+    "version": "0.9.0",
+    "identifier": "com.graphite.ai",
     "build": {
         "frontendDist": "../out",
         "devUrl": "http://localhost:3118",
@@ -34,7 +34,7 @@
                 "enable": true,
                 "scope": [
                     "$APPDATA/**",
-                    "$VIDEO/meetily-recordings/**"
+                    "$VIDEO/graphite-recordings/**"
                 ]
             },
             "capabilities": [

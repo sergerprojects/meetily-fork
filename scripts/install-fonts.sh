@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Optional: use your own UI/display fonts without committing them.
-#   MEETILY_FONT_DIR=/path/to/fonts bash scripts/install-fonts.sh
+#   GRAPHITE_FONT_DIR=/path/to/fonts bash scripts/install-fonts.sh
 # Looks in the folder for  *Sans*Light* / *Sans*Regular* / *Sans*Bold*  (ttf/otf) as the UI
 # font ("Brand Sans") and one *Demi*|*Display* font as the title font ("Brand Display").
 # Copies them to frontend/public/fonts/brand/ (git-ignored) and writes local.css there.
-# Without MEETILY_FONT_DIR nothing happens and the app uses the system font.
+# Without GRAPHITE_FONT_DIR nothing happens and the app uses the system font.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$ROOT/frontend/public/fonts/brand"
-SRC="${MEETILY_FONT_DIR:-}"
-[ -n "$SRC" ] && [ -d "$SRC" ] || { echo "MEETILY_FONT_DIR not set; using system fonts"; exit 0; }
+SRC="${GRAPHITE_FONT_DIR:-}"
+[ -n "$SRC" ] && [ -d "$SRC" ] || { echo "GRAPHITE_FONT_DIR not set; using system fonts"; exit 0; }
 rm -rf "$DEST"; mkdir -p "$DEST"
 css="$DEST/local.css"; : > "$css"
 face() { # family file weight

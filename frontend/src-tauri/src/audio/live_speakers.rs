@@ -36,23 +36,23 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
-fn meetily_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".meetily"))
+fn graphite_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".graphite"))
 }
 
 fn python() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("MEETILY_PYTHON").map(PathBuf::from).filter(|p| p.exists()) {
+    if let Some(p) = std::env::var_os("GRAPHITE_PYTHON").map(PathBuf::from).filter(|p| p.exists()) {
         return Some(p);
     }
-    let p = meetily_dir()?.join("venv/bin/python");
+    let p = graphite_dir()?.join("venv/bin/python");
     p.exists().then_some(p)
 }
 
 /// Start the helper for a new recording. Quietly leaves the feature off if it cannot run.
 pub async fn start() {
     stop().await;
-    let (Some(py), Some(dir)) = (python(), meetily_dir()) else {
-        log::info!("Live speakers: off (no ~/.meetily/venv; run scripts/setup-speakers.sh to enable)");
+    let (Some(py), Some(dir)) = (python(), graphite_dir()) else {
+        log::info!("Live speakers: off (no ~/.graphite/venv; run scripts/setup-speakers.sh to enable)");
         return;
     };
     let script = dir.join("live_speakers.py");

@@ -21,7 +21,7 @@ Recording and transcription work with no calendar at all. The calendar is a conv
 bash scripts/install-mac.sh
 ```
 
-It checks prerequisites (Xcode command line tools, Rust, Node, cmake), builds, backs up any existing install to `~/meetily-backup/`, installs to `/Applications/meetily.app`, clears quarantine (unsigned build) and launches. First build: 10-20 minutes. The final "A public key has been found, but no private key" message is expected and harmless.
+It checks prerequisites (Xcode command line tools, Rust, Node, cmake), builds, backs up any existing install to `~/graphite-backup/`, installs to `/Applications/meetily.app`, clears quarantine (unsigned build) and launches. First build: 10-20 minutes. The final "A public key has been found, but no private key" message is expected and harmless.
 
 **Windows / Intel Mac / Linux (untested):** upstream Meetily supports Windows, and most of this fork's code is not platform-specific, but nobody has built or run it there. Read `docs/BUILDING.md` and `frontend/build-gpu.*`, build with the Tauri CLI, and fix what breaks. Known Mac-only pieces in this fork:
 - `frontend/src-tauri/src/calendar/mic_activity.rs`: "you joined a call" detection reads CoreAudio. On other OSes `sample()` returns `None`, so join prompts are off (calendar-time prompts still work). Implementing it needs per-process audio-session enumeration (WASAPI on Windows).
@@ -44,7 +44,7 @@ gcloud auth application-default set-quota-project <their-project-id>
 gcloud services enable calendar-json.googleapis.com --project <their-project-id>   # if not already on
 ```
 
-To show attendees by real name instead of an email handle, add `https://www.googleapis.com/auth/directory.readonly` to `--scopes` and run `gcloud services enable people.googleapis.com --project <their-project-id>`. Graphite then looks up each unknown attendee once in the Google Workspace directory and caches the answer in `~/.meetily/people.json` (`{"email": "Full Name"}`, hand-editable, never sent anywhere). If a login with more scopes is already in use by other tools, keep all of its existing scopes: a new `gcloud auth application-default login` replaces the old scope set.
+To show attendees by real name instead of an email handle, add `https://www.googleapis.com/auth/directory.readonly` to `--scopes` and run `gcloud services enable people.googleapis.com --project <their-project-id>`. Graphite then looks up each unknown attendee once in the Google Workspace directory and caches the answer in `~/.graphite/people.json` (`{"email": "Full Name"}`, hand-editable, never sent anywhere). If a login with more scopes is already in use by other tools, keep all of its existing scopes: a new `gcloud auth application-default login` replaces the old scope set.
 
 That writes `application_default_credentials.json` (macOS/Linux `~/.config/gcloud/`, Windows `%APPDATA%\gcloud\`, or `$CLOUDSDK_CONFIG`). Restart Graphite; Settings → Recording should say "Connected via Google sign-in (gcloud)". Read-only calendar scope only.
 
@@ -78,9 +78,9 @@ Things that can go wrong: no personal project or no permission to enable the Cal
 The app labels lines "You" (microphone) and "Others" (everyone else). `tools/diarize_meeting.py` goes further on-device: it separates the "Others" audio into Speaker 1, Speaker 2, ... by voice. It needs the meeting's `audio.mp4`. Audio is **not** saved by default; this step only works if the person turns on Settings -> Recording -> "Save Audio Recordings" (their choice: it keeps recordings of other people's voices on disk).
 
 ```bash
-python3 -m venv ~/.meetily/venv && ~/.meetily/venv/bin/pip install sherpa-onnx numpy
-~/.meetily/venv/bin/python tools/diarize_meeting.py --download-models   # ~32 MB from the k2-fsa/sherpa-onnx releases, once
-~/.meetily/venv/bin/python tools/diarize_meeting.py ~/Movies/meetily-recordings/<meeting folder>   # writes speakers.json
+python3 -m venv ~/.graphite/venv && ~/.graphite/venv/bin/pip install sherpa-onnx numpy
+~/.graphite/venv/bin/python tools/diarize_meeting.py --download-models   # ~32 MB from the k2-fsa/sherpa-onnx releases, once
+~/.graphite/venv/bin/python tools/diarize_meeting.py ~/Movies/graphite-recordings/<meeting folder>   # writes speakers.json
 ```
 
 Turning "Speaker 2" into a person's name is left to you: match against the calendar attendee list (`calendar_event` in the meeting's `metadata.json`) using what is said in the meeting ("thanks, Sam", self-introductions). Only apply a name when the dialogue says so; otherwise keep "Speaker N". Measured so far: separates you from one other voice well; with several similar voices it can merge or split people. Treat labels as best guesses.
@@ -95,11 +95,11 @@ Graphite asks for these in Settings → Capture and during onboarding:
 
 macOS ties these permissions to the app's code signature. An ad-hoc signed build gets a new identity on every rebuild, so macOS forgets the grants after each install. Run `bash scripts/make-signing-cert.sh` once (creates a local self-signed "Graphite Local" identity in your login keychain, never leaves the Mac); `scripts/install-mac.sh` then signs with it automatically and the grants survive reinstalls.
 
-Snapshot pictures and the `active_speakers.json` timeline are saved inside each meeting's folder under `~/Movies/meetily-recordings/`. Snapshots keep pictures of other people's shared content: tell the person, and get consent where needed.
+Snapshot pictures and the `active_speakers.json` timeline are saved inside each meeting's folder under `~/Movies/graphite-recordings/`. Snapshots keep pictures of other people's shared content: tell the person, and get consent where needed.
 
 ## Notes
 
-- Recordings: `~/Movies/meetily-recordings/`. Database: `~/Library/Application Support/com.meetily.ai/meeting_minutes.sqlite` (SQLite WAL: copy with `sqlite3 ... ".backup"`, never `cp`).
+- Recordings: `~/Movies/graphite-recordings/`. Database: `~/Library/Application Support/com.graphite.ai/meeting_minutes.sqlite` (SQLite WAL: copy with `sqlite3 ... ".backup"`, never `cp`).
 - Leave the built-in summary and its API-key providers alone unless the person's organization has approved sending transcripts to that provider.
 - This app shares a bundle id with upstream Meetily, so only one can be installed.
 - Code map: calendar in `frontend/src-tauri/src/calendar/` (`google.rs`, `ical.rs`, `poller.rs`, `autorecord.rs`, `mic_activity.rs`); speaker labels in `frontend/src-tauri/src/audio/pipeline.rs`; launch at login in `lib.rs` (`tauri-plugin-autostart`).

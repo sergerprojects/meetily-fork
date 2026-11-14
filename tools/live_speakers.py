@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Live "who is speaking" labels for Meetily, entirely in memory.
+"""Live "who is speaking" labels for Graphite, entirely in memory.
 
-Meetily starts this once per recording and sends it each stretch of call audio (the
+Graphite starts this once per recording and sends it each stretch of call audio (the
 "Others" side) as it is transcribed. It answers with a speaker number: the same voice
 gets the same number for the whole meeting. No audio is ever written to disk.
 
@@ -21,13 +21,13 @@ from pathlib import Path
 
 import numpy as np
 
-MODELS = Path(os.environ.get("MEETILY_SPEAKER_MODELS", Path.home() / ".meetily" / "speaker-models"))
+MODELS = Path(os.environ.get("GRAPHITE_SPEAKER_MODELS", Path.home() / ".graphite" / "speaker-models"))
 MODEL_FILE = "wespeaker_en_voxceleb_resnet34_LM.onnx"
 TARGET_SR = 16000
 MIN_SECONDS = 1.2           # shorter stretches are too unreliable to label
 CREATE_MIN_SECONDS = 2.5    # only a longer stretch may start a NEW speaker (short ones split one voice in two)
 CENTROID_MIN_SECONDS = 2.0  # only longer stretches move a voice's average
-ASSIGN_SIM = float(os.environ.get("MEETILY_SPEAKER_SIM", "0.84"))
+ASSIGN_SIM = float(os.environ.get("GRAPHITE_SPEAKER_SIM", "0.84"))
 LOOSE_MARGIN = 0.10         # a shorter stretch may join a voice this much below the strict bar
 MAX_SPEAKERS = 12
 

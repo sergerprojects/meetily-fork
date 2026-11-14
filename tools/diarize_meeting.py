@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Split Meetily's "Others" lines into Speaker 1, Speaker 2, ... by voice.
+"""Split Graphite's "Others" lines into Speaker 1, Speaker 2, ... by voice.
 
-Meetily already labels each transcript line "You" (microphone) or "Others"
+Graphite already labels each transcript line "You" (microphone) or "Others"
 (everyone else on the call, system audio). This runs on-device speaker
 diarization over the saved meeting audio and refines "Others" into separate
 voices. It does not know names: pair it with the meeting's attendee list
-(see scripts/import-meetily.py in a downstream setup, or do it yourself).
+(see scripts/import-graphite.py in a downstream setup, or do it yourself).
 
 Needs: Python 3.9+, `pip install sherpa-onnx numpy`, ffmpeg, and two small
 model files (run once with --download-models, ~32 MB total from the
 k2-fsa/sherpa-onnx GitHub releases). The meeting folder must contain
 audio.mp4 (Settings -> Recording -> save audio on) and transcripts.json.
 
-    python3 tools/diarize_meeting.py ~/Movies/meetily-recordings/<meeting>
+    python3 tools/diarize_meeting.py ~/Movies/graphite-recordings/<meeting>
 
 Writes <meeting>/speakers.json:
     {"segments": {"<audio_start_time, 2dp>": "You" | "Speaker 1" | "Others"}, ...}
@@ -32,7 +32,7 @@ import urllib.request
 import wave
 from pathlib import Path
 
-MODELS_DIR = Path(os.environ.get("MEETILY_SPEAKER_MODELS", Path.home() / ".meetily" / "speaker-models"))
+MODELS_DIR = Path(os.environ.get("GRAPHITE_SPEAKER_MODELS", Path.home() / ".graphite" / "speaker-models"))
 SEG_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/"
            "sherpa-onnx-pyannote-segmentation-3-0.tar.bz2")
 EMB_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/"
