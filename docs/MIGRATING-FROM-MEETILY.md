@@ -6,7 +6,7 @@ Graphite was first built under Meetily's names. Builds from 0.9.0 use new ones:
 | --- | --- |
 | `~/Movies/meetily-recordings` | `~/Movies/graphite-recordings` |
 | `~/.meetily` (voice models, calendar cache, `people.json`) | `~/.graphite` |
-| bundle id `com.meetily.ai` and its data folder | `com.graphite.app` |
+| bundle id `com.meetily.ai` and its data folder | `com.graphite.ai` |
 | process / binary `meetily` | `graphite` |
 | env vars `MEETILY_*` | `GRAPHITE_*` |
 

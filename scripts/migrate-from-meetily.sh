@@ -3,8 +3,8 @@
 #
 #   ~/Movies/meetily-recordings          -> ~/Movies/graphite-recordings
 #   ~/.meetily                           -> ~/.graphite
-#   ~/Library/Application Support/com.meetily.ai  -> .../com.graphite.app
-#   ~/Library/WebKit, ~/Library/Caches (com.meetily.ai) -> com.graphite.app
+#   ~/Library/Application Support/com.meetily.ai  -> .../com.graphite.ai
+#   ~/Library/WebKit, ~/Library/Caches (com.meetily.ai) -> com.graphite.ai
 #   ~/Library/Application Support/meetily (notification prefs) -> .../graphite
 #   meetings.folder_path inside the database is rewritten to the new recordings path
 #
@@ -14,7 +14,7 @@ set -euo pipefail
 
 H="$HOME"
 APPSUP="$H/Library/Application Support"
-DB_NEW="$APPSUP/com.graphite.app/meeting_minutes.sqlite"
+DB_NEW="$APPSUP/com.graphite.ai/meeting_minutes.sqlite"
 
 if pgrep -x graphite >/dev/null || pgrep -x meetily >/dev/null; then
   echo "Quit Graphite first." >&2; exit 1
@@ -33,10 +33,10 @@ fi
 
 move "$H/Movies/meetily-recordings" "$H/Movies/graphite-recordings"
 move "$H/.meetily" "$H/.graphite"
-move "$APPSUP/com.meetily.ai" "$APPSUP/com.graphite.app"
+move "$APPSUP/com.meetily.ai" "$APPSUP/com.graphite.ai"
 move "$APPSUP/meetily" "$APPSUP/graphite"
-move "$H/Library/WebKit/com.meetily.ai" "$H/Library/WebKit/com.graphite.app"
-move "$H/Library/Caches/com.meetily.ai" "$H/Library/Caches/com.graphite.app"
+move "$H/Library/WebKit/com.meetily.ai" "$H/Library/WebKit/com.graphite.ai"
+move "$H/Library/Caches/com.meetily.ai" "$H/Library/Caches/com.graphite.ai"
 
 if [ -f "$DB_NEW" ]; then
   sqlite3 "$DB_NEW" "UPDATE meetings SET folder_path = replace(folder_path, '/Movies/meetily-recordings', '/Movies/graphite-recordings') WHERE folder_path LIKE '%/Movies/meetily-recordings%';"
