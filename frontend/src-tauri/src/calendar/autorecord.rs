@@ -303,7 +303,7 @@ pub fn start(app: AppHandle<Wry>) {
             let now = Utc::now();
             let is_recording = crate::audio::recording_commands::is_recording().await;
 
-            // Device-level fallback can't distinguish Meetily's own capture:
+            // Device-level fallback can't distinguish Graphite's own capture:
             // hold state while we record.
             let transition = match mic_activity::sample() {
                 Some(MicSample::OtherProcesses(active)) => debounce.update(active, now),
@@ -346,13 +346,13 @@ async fn perform(app: &AppHandle<Wry>, action: Action) {
         Action::PromptEvent(event) => {
             log::info!("Calendar: joined meeting, prompting (event {})", event.id);
             let _ = app.emit(MEETING_STARTING_EVENT, serde_json::json!({ "event": &event }));
-            notify(app, format!("{} — open Meetily to record", event.summary)).await;
+            notify(app, format!("{} — open Graphite to record", event.summary)).await;
         }
         Action::PromptAdhoc => {
             let title = adhoc_title(&Local::now());
             log::info!("Calendar: unmatched call detected, prompting");
             let _ = app.emit(ADHOC_CALL_EVENT, serde_json::json!({ "title": &title }));
-            notify(app, "Record this call? Open Meetily to start".to_string()).await;
+            notify(app, "Record this call? Open Graphite to start".to_string()).await;
         }
         Action::AutoStop { title } => {
             log::info!("Calendar: auto-stopping recording");

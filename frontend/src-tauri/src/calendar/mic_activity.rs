@@ -2,7 +2,7 @@
 //!
 //! macOS: reads CoreAudio state directly (no extra crate). Preferred source is
 //! the per-process list (macOS 14+, `kAudioProcessPropertyIsRunningInput`),
-//! which lets us ignore Meetily's own capture. Older systems fall back to
+//! which lets us ignore Graphite's own capture. Older systems fall back to
 //! `kAudioDevicePropertyDeviceIsRunningSomewhere` on the default input device,
 //! which can't tell us apart, so callers must ignore it while recording.
 //! Other OSes: `sample()` returns None (feature off).
@@ -21,9 +21,9 @@ pub const LEAVE_AFTER: Duration = Duration::seconds(90);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MicSample {
-    /// Some process other than Meetily is capturing input.
+    /// Some process other than Graphite is capturing input.
     OtherProcesses(bool),
-    /// Default input device is running (may be Meetily itself).
+    /// Default input device is running (may be Graphite itself).
     DeviceOnly(bool),
 }
 

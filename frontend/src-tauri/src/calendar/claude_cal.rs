@@ -1,9 +1,9 @@
 //! Calendar source: your Google Calendar through the Claude connector that is already
-//! signed in to your Google Workspace. Meetily asks your own Claude Code CLI (headless,
+//! signed in to your Google Workspace. Graphite asks your own Claude Code CLI (headless,
 //! only the calendar tools allowed) for your meetings and reads the JSON it returns.
 //! No Google Cloud project, no OAuth client, no key in this app.
 //!
-//! The model makes one `list_events` call and Meetily lifts the connector's RAW result
+//! The model makes one `list_events` call and Graphite lifts the connector's RAW result
 //! from Claude Code's stream output, so the model never rewrites your calendar.
 //! Needs the Google Calendar connector authorized once (run `/mcp` in Claude Code).
 //! Each refresh takes ~15-30 s, so results are cached for several minutes.

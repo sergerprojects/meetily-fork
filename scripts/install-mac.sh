@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and install this Meetily fork on an Apple Silicon Mac.
+# Build and install Graphite on an Apple Silicon Mac.
 # Run from anywhere: bash scripts/install-mac.sh
 # Takes ~10-20 min the first time (Rust release build). Safe to re-run.
 set -euo pipefail
@@ -53,4 +53,4 @@ fi
 cp -R "$APP" /Applications/Graphite.app
 xattr -cr /Applications/Graphite.app   # unsigned build: clear quarantine
 open /Applications/Graphite.app
-echo "Done. Meetily is running (menu bar) and will launch at login."
+echo "Done. Graphite is running (menu bar) and will launch at login."

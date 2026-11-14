@@ -1,10 +1,10 @@
-# Setup guide for an AI agent (this fork of Meetily)
+# Setup guide for an AI agent (Graphite)
 
 You are an AI agent helping a person set up a local meeting recorder on their own computer. This is a shared fork, not a managed product: nobody maintains it for you. Adapt freely, and tell the person what you changed.
 
 Everything stays on the machine: audio, on-device transcription (Parakeet), calendar access. No server.
 
-## What this fork adds over upstream Meetily
+## What this fork adds over upstream Meetily (the project Graphite is forked from)
 
 - "You / Others" speaker labels (mic vs system audio energy)
 - Calendar awareness: meeting titles and attendees on recordings, a menu-bar list of today's/tomorrow's meetings, a prompt (or auto-record) when you join a Zoom / Teams / Meet / Slack call
@@ -44,9 +44,9 @@ gcloud auth application-default set-quota-project <their-project-id>
 gcloud services enable calendar-json.googleapis.com --project <their-project-id>   # if not already on
 ```
 
-To show attendees by real name instead of an email handle, add `https://www.googleapis.com/auth/directory.readonly` to `--scopes` and run `gcloud services enable people.googleapis.com --project <their-project-id>`. Meetily then looks up each unknown attendee once in the Google Workspace directory and caches the answer in `~/.meetily/people.json` (`{"email": "Full Name"}`, hand-editable, never sent anywhere). If a login with more scopes is already in use by other tools, keep all of its existing scopes: a new `gcloud auth application-default login` replaces the old scope set.
+To show attendees by real name instead of an email handle, add `https://www.googleapis.com/auth/directory.readonly` to `--scopes` and run `gcloud services enable people.googleapis.com --project <their-project-id>`. Graphite then looks up each unknown attendee once in the Google Workspace directory and caches the answer in `~/.meetily/people.json` (`{"email": "Full Name"}`, hand-editable, never sent anywhere). If a login with more scopes is already in use by other tools, keep all of its existing scopes: a new `gcloud auth application-default login` replaces the old scope set.
 
-That writes `application_default_credentials.json` (macOS/Linux `~/.config/gcloud/`, Windows `%APPDATA%\gcloud\`, or `$CLOUDSDK_CONFIG`). Restart Meetily; Settings → Recording should say "Connected via Google sign-in (gcloud)". Read-only calendar scope only.
+That writes `application_default_credentials.json` (macOS/Linux `~/.config/gcloud/`, Windows `%APPDATA%\gcloud\`, or `$CLOUDSDK_CONFIG`). Restart Graphite; Settings → Recording should say "Connected via Google sign-in (gcloud)". Read-only calendar scope only.
 
 Things that can go wrong: no personal project or no permission to enable the Calendar API; the company blocks the calendar scope for gcloud's client; `gcloud` not installed. If so, try a different source below.
 
@@ -100,6 +100,6 @@ Snapshot pictures and the `active_speakers.json` timeline are saved inside each 
 ## Notes
 
 - Recordings: `~/Movies/meetily-recordings/`. Database: `~/Library/Application Support/com.meetily.ai/meeting_minutes.sqlite` (SQLite WAL: copy with `sqlite3 ... ".backup"`, never `cp`).
-- Leave Meetily's built-in summary and its API-key providers alone unless the person's organization has approved sending transcripts to that provider.
+- Leave the built-in summary and its API-key providers alone unless the person's organization has approved sending transcripts to that provider.
 - This app shares a bundle id with upstream Meetily, so only one can be installed.
 - Code map: calendar in `frontend/src-tauri/src/calendar/` (`google.rs`, `ical.rs`, `poller.rs`, `autorecord.rs`, `mic_activity.rs`); speaker labels in `frontend/src-tauri/src/audio/pipeline.rs`; launch at login in `lib.rs` (`tauri-plugin-autostart`).

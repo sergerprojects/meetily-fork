@@ -106,7 +106,7 @@ async fn poll_once(
             log::warn!("Calendar: failed to emit {}: {}", MEETING_STARTING_EVENT, e);
         }
 
-        notify(app, format!("{} is starting — open Meetily to record", event.summary)).await;
+        notify(app, format!("{} is starting — open Graphite to record", event.summary)).await;
     }
 }
 
@@ -116,7 +116,7 @@ pub(crate) async fn notify(app: &AppHandle<Wry>, body: String) {
     let state = app.state::<NotificationManagerState<Wry>>();
     let guard = state.read().await;
     if let Some(manager) = guard.as_ref() {
-        let notification = Notification::new("Meetily", body, NotificationType::MeetingReminder(0));
+        let notification = Notification::new("Graphite", body, NotificationType::MeetingReminder(0));
         if let Err(e) = manager.show_notification(notification).await {
             log::warn!("Calendar: failed to show notification: {}", e);
         }
