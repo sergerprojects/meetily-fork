@@ -17,4 +17,4 @@ A fresh install needs nothing. If you already have meetings:
 3. Build and install this version (`bash scripts/install-mac.sh`).
 4. macOS treats the new bundle id as a new app: allow Microphone, Audio capture, Accessibility and (for snapshots) Screen Recording again.
 
-Browser-stored settings (the chat quick-questions you edited, the confidence switch) move with the WebKit folder. The login item is rewritten by the app on first launch.
+Browser-stored settings (the chat quick-questions you edited, the confidence switch) move with the WebKit folder. The script also repoints the login item at the new binary name.

@@ -43,6 +43,10 @@ if [ -f "$DB_NEW" ]; then
   echo "database paths updated: $(sqlite3 "$DB_NEW" "SELECT count(*) FROM meetings WHERE folder_path LIKE '%graphite-recordings%';") meetings"
 fi
 
-# Old login item points at the old binary name; the app rewrites it on first run.
-rm -f "$H/Library/LaunchAgents/meetily.plist"
+# The login item points at the old binary name: repoint it.
+for plist in "$H/Library/LaunchAgents/Graphite.plist" "$H/Library/LaunchAgents/meetily.plist"; do
+  if [ -f "$plist" ] && grep -q "MacOS/meetily" "$plist"; then
+    sed -i '' 's#MacOS/meetily#MacOS/graphite#' "$plist" && echo "login item repointed: $plist"
+  fi
+done
 echo "Done."
